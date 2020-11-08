@@ -1,0 +1,99 @@
+import os
+
+from util.FileUtils import read_json_file
+
+
+def check_property_null(repo_path):
+    null_property_dic = {
+        "hasDependencies": set(),
+        "packageManager": set(),
+        "packageName": set(),
+        "repository": set(),
+        "requirements": set(),
+    }
+    for repo_index, repo_file in enumerate(os.listdir(repo_path)):
+        json = read_json_file(os.path.join(repo_path, repo_file))
+        try:
+            dependencyGraphManifest_nodes = json["data"]["repository"]["dependencyGraphManifests"]["nodes"]
+            for node in dependencyGraphManifest_nodes:
+                dependency_nodes = node["dependencies"]["nodes"]
+                for node2 in dependency_nodes:
+                    for key, val in node2.items():
+                        if val is None:
+                            null_property_dic[key].add(json["data"]["repository"]["nameWithOwner"])
+        except Exception as e:
+            print(e)
+            print("exception at: " + repo_path + repo_file)
+    return null_property_dic
+
+
+def check_multi_page_100(repo_path):
+    over_100_dic = {
+        "dependencyGraphManifests_count": set(),
+        "max_dependency_count": set(),
+        "language_count": set(),
+        "topic_count": set()
+    }
+    for repo_index, repo_file in enumerate(os.listdir(repo_path)):
+        json = read_json_file(os.path.join(repo_path, repo_file))
+        try:
+            repo = json["data"]["repository"]
+            repoName = repo["nameWithOwner"]
+            exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
+            if exclude:
+                print("should be excluded: " + repo_path + repo_file)
+            dependencyGraphManifests_count = repo["dependencyGraphManifests"]["totalCount"]
+            if dependencyGraphManifests_count > 100:
+                over_100_dic["dependencyGraphManifests_count"].add(repoName)
+            max_dependency_count = 0
+            for node in repo["dependencyGraphManifests"]["nodes"]:
+                dependency_count = node["dependencies"]["totalCount"]
+                if dependency_count > max_dependency_count:
+                    max_dependency_count = dependency_count
+            if max_dependency_count > 100:
+                over_100_dic["max_dependency_count"].add(repoName)
+            language_count = repo["languages"]["totalCount"]
+            if language_count > 100:
+                over_100_dic["language_count"].add(repoName)
+            topic_count = repo["repositoryTopics"]["totalCount"]
+            if topic_count > 100:
+                over_100_dic["topic_count"].add(repoName)
+        except Exception as e:
+            print(e)
+            print("exception at: " + repo_path + repo_file)
+    return over_100_dic
+
+
+def get_data_one_topic_repos(topic_path):
+    res = set()
+    for page_index, page_file in enumerate(os.listdir(topic_path)):
+        json = read_json_file(os.path.join(topic_path, page_file))
+        # 预处理，忽略fork的仓库 private仓库
+        for item in json["items"]:
+            exclude = item["size"] == 0 or item["fork"] or item["private"]
+            if exclude is True:
+                continue
+            res.add(item["full_name"])
+    return res
+
+
+def get_data_topic_repo_set(topic_repo_path):
+    res = set()
+    for topic_index, topic_dir in enumerate(os.listdir(topic_repo_path)):
+        for page_index, page_file in enumerate(os.listdir(os.path.join(topic_repo_path, topic_dir))):
+            json = read_json_file(os.path.join(topic_repo_path, topic_dir, page_file))
+            # 预处理，忽略fork的仓库 private仓库
+            for item in json["items"]:
+                exclude = item["size"] == 0 or item["fork"] or item["private"]
+                if exclude is True:
+                    continue
+                res.add(item["full_name"])
+    return res
+
+
+def get_data_repo_set(repo_dir_path):
+    res = set()
+    for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
+        owner, repoName = os.path.splitext(repo_file)[0].split("-$-")
+        res.add(owner + "/" + repoName)
+    return res
