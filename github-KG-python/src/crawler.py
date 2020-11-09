@@ -5,7 +5,7 @@ import requests
 
 from src import queries
 from src.statistic import *
-from util.FileUtils import write_json_file
+from util.FileUtils import *
 
 
 def read_token():
@@ -33,9 +33,9 @@ class GithubAPIv3(object):
     def __init__(self):
         self.api = "https://api.github.com/"
 
-    def search_topic_repos(self, q, sort, order, per_page, out_dir_path):
-        one_topic = q.split(":")[1]
+    def search_topic_page_repos(self, q, sort, order, per_page, out_dir_path):
         print("begin to search: " + q)
+        one_topic = q.split(":")[1]
         pageNo = 1
         while True:
             print("crawling page " + str(pageNo) + "...")
@@ -80,24 +80,27 @@ class GithubAPIv4(object):
     def __init__(self):
         self.api = "https://api.github.com/graphql"
 
-    def get_topic_repos(self, topic_dir_path, out_dir_path):
-        data_one_topic_repo_set = get_data_one_topic_repos(topic_dir_path)
-        # 扫描已有的仓库数据
-        data_repo_set = get_data_repo_set(out_dir_path)
-        payload_repo_set = data_one_topic_repo_set - data_repo_set
-        for repo in payload_repo_set:
-            self.get_repo(repo, out_dir_path)
-        print("get topic repo batch finished")
-
-    def get_repo_batch(self, topic_repo_dir_path, out_dir_path):
-        # 扫描topic需要爬取的仓库
-        data_topic_repo_set = get_data_topic_repo_set(topic_repo_dir_path)
-        # 扫描已有的仓库数据
-        data_repo_set = get_data_repo_set(out_dir_path)
-        payload_repo_set = data_topic_repo_set - data_repo_set
-        for repo in payload_repo_set:
-            self.get_repo(repo, out_dir_path)
-        print("get repo batch finished")
+    def get_relate_topics(self, topic, out_dir_path):
+        while True:
+            tokens = read_token()
+            token = tokens[random.randint(0, len(tokens) - 1)].strip()
+            headers = {"Authorization": "Bearer %s" % token}
+            query = queries.topic_query % topic
+            try:
+                response = requests.post(url=self.api, headers=headers, json={"query": query})
+                response_json = response.json()
+                print("response.status_code: " + str(response.status_code))
+                if response.status_code != 200:
+                    logger.info("request error at: " + str(topic))
+                # 写入文件
+                write_json_file(out_dir_path, out_dir_path + "/" + topic + ".json", response_json)
+                break
+            except Exception as e:
+                print(e)
+                print("other exception at: " + topic)
+                logger.error("other exception at: " + topic)
+                continue
+        print("get_relate_topics finished")
 
     def get_repo(self, repo_full_name, out_dir_path):
         owner, repoName = repo_full_name.split("/")
@@ -146,31 +149,66 @@ class GithubAPIv4(object):
                 logger.error("exception at: " + owner + "/" + repoName)
                 continue
 
-    def list_relate_topics(self, topic):
-        while True:
-            tokens = read_token()
-            token = tokens[random.randint(0, len(tokens) - 1)].strip()
-            headers = {"Authorization": "Bearer %s" % token}
-            query = queries.topic_query % topic
-            try:
-                response = requests.post(url=self.api, headers=headers, json={"query": query})
-                response_json = response.json()
-                print("response.status_code: " + str(response.status_code))
-                if response.status_code != 200:
-                    logger.info("request error at: " + str(topic))
-                # 写入文件
-                out_dir = os.path.join(os.getcwd(), "..", "tx_data", "topic")
-                write_json_file(out_dir, os.path.join(out_dir, topic + ".json"), response_json)
-                break
-            except Exception as e:
-                print(e)
-                print("other exception at: " + topic)
-                continue
-        print("get finished")
-
     def filter_repo(self, response_json):
         repo = response_json["data"]["repository"]
         if repo is None:
             raise Exception("null repo")
         exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
         return exclude
+
+
+v4 = GithubAPIv4()
+
+
+def get_repos_paperswithcode(json_file_path, out_dir_path):
+    json_dic = read_json_file(json_file_path)
+    repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
+    ownerWithName_list = []
+    for url in repo_url_list:
+        tokens = url.split("/")
+        owner_with_name = tokens[-2] + "/" + tokens[-1]
+        ownerWithName_list.append(owner_with_name)
+    ownerWithName_set = set(ownerWithName_list)
+    # 扫描已有的
+    data_repo_set = get_data_repo_set(out_dir_path)
+    payload_repo_set = ownerWithName_set - data_repo_set
+    for ownerWithName in payload_repo_set:
+        v4.get_repo(ownerWithName, out_dir_path)
+
+
+def get_topic_repos(self, topic_dir_path, out_dir_path):
+    data_one_topic_repo_set = get_data_one_topic_repo_set(topic_dir_path)
+    # 扫描已有的仓库数据
+    data_repo_set = get_data_repo_set(out_dir_path)
+    payload_repo_set = data_one_topic_repo_set - data_repo_set
+    for repo in payload_repo_set:
+        self.get_repo(repo, out_dir_path)
+    print("get topic repo batch finished")
+
+
+def get_relate_topics_from_file_batch(file_path, out_dir_path):
+    # 扫描需要爬取的
+    topics = read_file(file_path).replace("\n", "").split(",")
+    for i in range(len(topics)):
+        topics[i] = topics[i].strip()
+    topic_set = set(topics)
+    # 扫描已有的
+    data_topic_set = get_data_topic_set(out_dir_path)
+    payload_topic_set = topic_set - data_topic_set
+    lower_topic_set = set()
+    for topic in payload_topic_set:
+        lower_topic_set.add(topic.lower())
+    extend_topic_set = (payload_topic_set | lower_topic_set)
+    for topic in extend_topic_set:
+        v4.get_relate_topics(topic, out_dir_path)
+
+
+def get_topics_repos_batch(topic_repo_dir_path, out_dir_path):
+    # 扫描topic需要爬取的仓库
+    data_topic_repo_set = get_data_topic_repo_set(topic_repo_dir_path)
+    # 扫描已有的仓库数据
+    data_repo_set = get_data_repo_set(out_dir_path)
+    payload_repo_set = data_topic_repo_set - data_repo_set
+    for repo in payload_repo_set:
+        v4.get_repo(repo, out_dir_path)
+    print("get repo batch finished")

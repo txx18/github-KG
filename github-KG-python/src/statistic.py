@@ -1,6 +1,31 @@
 import os
 
 from util.FileUtils import read_json_file
+import jsonpath
+
+
+def stat_dependencyGraphManifests(repo_path):
+    res = {
+        "has_dfm": 0,
+        "no_dfm": 0,
+    }
+    for repo_index, repo_file in enumerate(os.listdir(repo_path)):
+        json_dic = read_json_file(os.path.join(repo_path, repo_file))
+        dependencyGraphManifests_count = jsonpath.jsonpath(json_dic,
+                                                           "$.data.repository.dependencyGraphManifests.totalCount")[0]
+        if dependencyGraphManifests_count == 0:
+            res["no_dfm"] += 1
+        else:
+            res["has_dfm"] += 1
+    return res
+
+
+def get_data_topic_set(out_dir_path):
+    res = set()
+    for i, topic_file in enumerate(os.listdir(out_dir_path)):
+        topic = os.path.splitext(topic_file)[0]
+        res.add(topic)
+    return res
 
 
 def check_property_null(repo_path):
@@ -64,7 +89,7 @@ def check_multi_page_100(repo_path):
     return over_100_dic
 
 
-def get_data_one_topic_repos(topic_path):
+def get_data_one_topic_repo_set(topic_path):
     res = set()
     for page_index, page_file in enumerate(os.listdir(topic_path)):
         json = read_json_file(os.path.join(topic_path, page_file))
