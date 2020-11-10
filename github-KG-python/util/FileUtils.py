@@ -2,12 +2,24 @@ import os
 import json
 
 
+def read_file_lines(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.readlines()
+
+
+def write_file_line_append(file_dir_path, file_path, data):
+    if not os.path.exists(file_dir_path):
+        os.makedirs(file_dir_path)
+    with open(file_path, 'a', encoding='utf-8') as f:
+        f.write("\n" + data)
+
+
 def read_file(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
-def writeFile(file_dir_path, file_path, data):
+def write_file(file_dir_path, file_path, data):
     """
     python to file
     :param file_dir_path:
@@ -18,11 +30,10 @@ def writeFile(file_dir_path, file_path, data):
     if not os.path.exists(file_dir_path):
         os.makedirs(file_dir_path)
     with open(file_path, 'w', encoding="utf-8") as outfile:
-        # json.dump(data, outfile)
         outfile.write(data)
 
 
-def writeFileAppend(file_dir_path, file, data):
+def write_file_append(file_dir_path, file, data):
     """
     python to file append
     :param file_dir_path:
@@ -33,7 +44,6 @@ def writeFileAppend(file_dir_path, file, data):
     if not os.path.exists(file_dir_path):
         os.makedirs(file_dir_path)
     with open(file, 'a', encoding="utf-8") as outfile:
-        # json.dump(data, outfile)
         outfile.write(data)
 
 

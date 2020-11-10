@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import random
 
@@ -118,17 +119,22 @@ class GithubAPIv4(object):
             try:
                 response = requests.post(url=self.api, headers=headers, json={"query": query})
                 response_json = response.json()
-                # 过滤仓库，可能出现异常，内部捕获，跳过该仓库
+                # 过滤仓库，可能出现异常，内部捕获，跳过该仓库，并记录
                 exclude = False
                 try:
                     exclude = self.filter_repo(response_json)
                 except Exception as e:
                     print(e)
-                    print("error at filter, pass " + owner + "/" + repoName)
-                    logger.error("error at filter, pass " + owner + "/" + repoName)
+                    log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
+                    print(log)
+                    logger.exception(log)
+                    # 记录exclude仓库
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
                     break
                 if exclude is True:
                     logger.info("exclude " + owner + "/" + repoName)
+                    # 记录exclude仓库
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
                     break
                 print("response.status_code: " + str(response.status_code))
                 # 不是200异常重试
@@ -146,7 +152,6 @@ class GithubAPIv4(object):
             except Exception as e:
                 print(e)
                 print("exception at: " + owner + "/" + repoName + ", retrying...")
-                logger.error("exception at: " + owner + "/" + repoName)
                 continue
 
     def filter_repo(self, response_json):
@@ -171,8 +176,20 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     ownerWithName_set = set(ownerWithName_list)
     # 扫描已有的
     data_repo_set = get_data_repo_set(out_dir_path)
-    payload_repo_set = ownerWithName_set - data_repo_set
-    for ownerWithName in payload_repo_set:
+    exclude_repo_list = read_file_lines(out_dir_path + "/exclude_repo.txt")
+    for i in range(len(exclude_repo_list)):
+        exclude_repo_list[i] = exclude_repo_list[i].strip()
+    exclude_repo_set = set(exclude_repo_list)
+    not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set
+    # 分派任务，这里有个大坑，python的hash()对同一字符串 在不同平台or多次运行 结果是不同的
+    MACHINE_COUNT = 2
+    payload_repo_list = []
+    for repo in not_exist_repo_set:
+        if int(hashlib.md5(repo.encode("utf8")).hexdigest(), 16) % MACHINE_COUNT == 1:
+            payload_repo_list.append(repo)
+        else:
+            pass
+    for ownerWithName in payload_repo_list:
         v4.get_repo(ownerWithName, out_dir_path)
 
 
