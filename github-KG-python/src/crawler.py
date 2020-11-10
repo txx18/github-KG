@@ -80,6 +80,7 @@ class GithubAPIv4(object):
 
     def __init__(self):
         self.api = "https://api.github.com/graphql"
+        self.retry_times = 0
 
     def get_relate_topics(self, topic, out_dir_path):
         while True:
@@ -121,19 +122,26 @@ class GithubAPIv4(object):
                 response_json = response.json()
                 # 过滤仓库，可能出现异常，内部捕获，跳过该仓库，并记录
                 exclude = False
+                # 如果过滤仓库时出现异常，视情况而定
                 try:
                     exclude = self.filter_repo(response_json)
                 except Exception as e:
                     print(e)
-                    log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
-                    print(log)
-                    logger.exception(log)
-                    # 记录exclude仓库
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
-                    break
+                    # null repo异常 记录exclude仓库，跳过
+                    if str(e) == "null repo":
+                        log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
+                        print(log)
+                        logger.exception(log)
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
+                        break
+                    # error异常 重试
+                    elif str(e) == "errors":
+                        raise Exception(e)
+                    else:
+                        break
                 if exclude is True:
                     logger.info("exclude " + owner + "/" + repoName)
-                    # 记录exclude仓库
+                    # 记录exclude仓库，跳过
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
                     break
                 print("response.status_code: " + str(response.status_code))
@@ -148,16 +156,25 @@ class GithubAPIv4(object):
                                 response_json)
                 print("write to file: " + str(os.path.join(out_dir_path, owner + "-$-" + repoName + ".json")))
                 break
-            # 异常重试，只捕获网络原因造成的异常（正常情况下本来是能200的）
+            # 捕获需要重试的异常
             except Exception as e:
-                print(e)
-                print("exception at: " + owner + "/" + repoName + ", retrying...")
-                continue
+                self.retry_times += 1
+                if self.retry_times >= 10:
+                    self.retry_times = 0
+                    break
+                else:
+                    print(e)
+                    print("exception at: " + owner + "/" + repoName + ", retrying...")
+                    continue
 
     def filter_repo(self, response_json):
-        repo = response_json["data"]["repository"]
+        repo = response_json.get("data").get("repository")
         if repo is None:
             raise Exception("null repo")
+        errors = response_json.get("errors")
+        if errors is not None:
+            raise Exception("errors")
+        # 排除这些属性任何一个为true的，也有可能出现异常
         exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
         return exclude
 
@@ -178,25 +195,29 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     data_repo_set = get_data_repo_set(out_dir_path)
     try:
         exclude_repo_list = read_file_lines(out_dir_path + "/exclude_repo.txt")
-    except Exception as e:
+    except FileExistsError as e:
         exclude_repo_list = []
     for i in range(len(exclude_repo_list)):
         exclude_repo_list[i] = exclude_repo_list[i].strip()
     exclude_repo_set = set(exclude_repo_list)
     not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set
-    # 分派任务，这里有个大坑，python的hash()对同一字符串 在不同平台or多次运行 结果是不同的
-    MACHINE_COUNT = 2
-    payload_repo_list = []
-    for repo in not_exist_repo_set:
-        if int(hashlib.md5(repo.encode("utf8")).hexdigest(), 16) % MACHINE_COUNT == 1:
-            payload_repo_list.append(repo)
-        else:
-            pass
+    payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
     crawled_count = 0
     for ownerWithName in payload_repo_list:
         v4.get_repo(ownerWithName, out_dir_path)
         crawled_count += 1
         print("has crawled: " + str(crawled_count) + "/" + str(len(payload_repo_list)))
+
+
+def crawl_repo_on_two_machine(not_exist_repo_set):
+    payload_repo_list = []
+    # 分派任务，这里有个大坑，python的hash()对同一字符串 在不同平台or多次运行 结果是不同的
+    for repo in not_exist_repo_set:
+        if int(hashlib.md5(repo.encode("utf8")).hexdigest(), 16) % 2 == 1:
+            payload_repo_list.append(repo)
+        else:
+            pass
+    return payload_repo_list
 
 
 def get_topic_repos(self, topic_dir_path, out_dir_path):

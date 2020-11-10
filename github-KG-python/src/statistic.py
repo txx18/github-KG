@@ -2,6 +2,28 @@ import os
 
 from util.FileUtils import read_json_file
 import jsonpath
+import shutil
+
+
+def move_errors_repos(repo_dir_path, move_dir_path):
+    error_repo_dic = check_errors_repos(repo_dir_path)
+    for repo in error_repo_dic.keys():
+        shutil.move(repo_dir_path + "/" + repo, move_dir_path)
+
+
+def check_errors_repos(repo_path):
+    error_repo_dic = {}
+    # error_repo_list = []
+    for repo_index, repo_file in enumerate(os.listdir(repo_path)):
+        if os.path.splitext(repo_file)[1] != ".json":
+            continue
+        json_dic = read_json_file(os.path.join(repo_path, repo_file))
+        errors = jsonpath.jsonpath(json_dic, "$.errors")
+        if errors is not False:
+            error_repo_dic[repo_file] = errors
+            # error_repo_list.append(repo_file)
+    # return error_repo_list
+    return error_repo_dic
 
 
 def stat_dependencyGraphManifests(repo_path):
