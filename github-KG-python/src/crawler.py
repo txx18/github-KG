@@ -176,7 +176,10 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     ownerWithName_set = set(ownerWithName_list)
     # 扫描已有的
     data_repo_set = get_data_repo_set(out_dir_path)
-    exclude_repo_list = read_file_lines(out_dir_path + "/exclude_repo.txt")
+    try:
+        exclude_repo_list = read_file_lines(out_dir_path + "/exclude_repo.txt")
+    except Exception as e:
+        exclude_repo_list = []
     for i in range(len(exclude_repo_list)):
         exclude_repo_list[i] = exclude_repo_list[i].strip()
     exclude_repo_set = set(exclude_repo_list)
@@ -189,8 +192,11 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
             payload_repo_list.append(repo)
         else:
             pass
+    crawled_count = 0
     for ownerWithName in payload_repo_list:
         v4.get_repo(ownerWithName, out_dir_path)
+        crawled_count += 1
+        print("has crawled: " + str(crawled_count) + "/" + str(len(payload_repo_list)))
 
 
 def get_topic_repos(self, topic_dir_path, out_dir_path):
