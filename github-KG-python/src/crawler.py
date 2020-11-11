@@ -127,25 +127,26 @@ class GithubAPIv4(object):
                     pass
                 elif errors_status == 'RATE_LIMITED':
                     raise Exception(errors_status + ": " + str(headers))
+                elif errors_status == 'NOT_FOUND':
+                    raise Exception(errors_status + ": " + str(repo_full_name))
                 else:
                     raise Exception(errors_status)
+                # 往下执行的
                 # 如果过滤仓库时出现异常，视情况而定
                 try:
                     exclude = self.filter_repo(response_json)
                 except Exception as e:
                     print(e)
                     # null repo异常 记录exclude仓库，跳过
-                    if str(e) == "null repo" or str(e) == "null filter property":
+                    if str(e) == "null repo":
                         log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
                         print(log)
                         logger.exception(log)
                         write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
                         break
-                    # error异常 重试
-                    elif str(e) == "errors":
-                        raise Exception(e)
+                    # 其他异常应该抛出重试
                     else:
-                        raise Exception("unknown filter exception")
+                        raise Exception(e)
                 if exclude is True:
                     logger.info("exclude " + owner + "/" + repoName)
                     # 记录exclude仓库，跳过
@@ -169,8 +170,8 @@ class GithubAPIv4(object):
                     self.retry_times = 0
                     break
                 else:
-                    print(e)
-                    print("exception at: " + owner + "/" + repoName + ", retrying...")
+                    print("exception at: " + owner + "/" + repoName + "message: \033[31m" + str(
+                        e) + "\033[0m" + ", retrying...")
                     continue
 
     def handle_errors(self, response_json):
@@ -181,26 +182,38 @@ class GithubAPIv4(object):
         for error in errors:
             if error.get('type') == 'RATE_LIMITED':
                 return 'RATE_LIMITED'
+            elif error.get('type') == 'NOT_FOUND':
+                return 'NOT_FOUND'
             else:
                 return "other error type"
 
     def filter_repo(self, response_json):
+        """
+
+        既有过滤自定义过滤repo的作用，也通过验证部分属性验证数据是否有效
+        :param response_json:
+        :return:
+        """
+        # 取一个值，可能是没有key，也有可能是有key value为null
+        # jsonpath没有key返回 False，有key value为null返回[None]
         # repo = jsonpath.jsonpath(response_json, "$.data.repository")
-        data = response_json.get("data")
-        if data is None:
-            raise Exception("null repo")
-        repo = data.get("repository")
+        try:
+            repo = response_json["data"]["repository"]
+        except Exception as e:
+            # 没有key, 先抛出观察
+            raise Exception("no repo key repo exception")
+        # 有key value为null的才跳过
         if repo is None:
             raise Exception("null repo")
-        # errors = jsonpath.jsonpath(response_json, "$.errors")
-        # errors = response_json.get("errors")
-        # if errors is not None:
-        #     raise Exception("errors")
-        # 排除这些属性任何一个为true的，也有可能出现异常
+        else:
+            pass
+        # 注意,jsonpath无法区分 没有key 和 有key但value为布尔值的
+        # 这些key任何一个值为true的，跳过
         try:
             exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
         except Exception as e:
-            raise Exception("null filter property")
+            # 这些key取 value时异常，则抛出
+            raise Exception("no property key exception")
         return exclude
 
 
