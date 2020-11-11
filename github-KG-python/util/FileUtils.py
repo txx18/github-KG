@@ -59,7 +59,6 @@ def write_json_file(file_dir_path, file_path, data):
         os.makedirs(file_dir_path)
     with open(file_path, 'w', encoding='utf-8') as outfile:
         json.dump(data, outfile, ensure_ascii=False)
-        # outfile.write(data)
 
 
 def read_json_file(file_path):

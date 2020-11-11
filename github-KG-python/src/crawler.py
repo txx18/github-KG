@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import random
+import time
 
 import requests
 
@@ -128,7 +129,7 @@ class GithubAPIv4(object):
                 except Exception as e:
                     print(e)
                     # null repo异常 记录exclude仓库，跳过
-                    if str(e) == "null repo":
+                    if str(e) == "null repo" or str(e) == "null filter property":
                         log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
                         print(log)
                         logger.exception(log)
@@ -138,20 +139,19 @@ class GithubAPIv4(object):
                     elif str(e) == "errors":
                         raise Exception(e)
                     else:
-                        break
+                        raise Exception("unknown filter exception")
                 if exclude is True:
                     logger.info("exclude " + owner + "/" + repoName)
                     # 记录exclude仓库，跳过
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
                     break
-                print("response.status_code: " + str(response.status_code))
+                print("status_code: \033[32m" + str(response.status_code) + "\033[0m")
                 # 不是200异常重试
                 if response.status_code != 200:
                     logger.info("request error at: " + owner + "/" + repoName)
                     raise Exception("status code is not 200! ")
                 # TODO 内部有4个字段可能有多页dependencyGraphManifests（嵌套dependencies），languages, repositoryTopics，但是一般都不会超过100个，所以这里统统不考虑了
                 # 写入文件
-                # out_dir = os.path.join(os.getcwd(), "..", "tx_data", "dp_repo")
                 write_json_file(out_dir_path, os.path.join(out_dir_path, owner + "-$-" + repoName + ".json"),
                                 response_json)
                 print("write to file: " + str(os.path.join(out_dir_path, owner + "-$-" + repoName + ".json")))
@@ -168,14 +168,22 @@ class GithubAPIv4(object):
                     continue
 
     def filter_repo(self, response_json):
-        repo = response_json.get("data").get("repository")
+        # repo = jsonpath.jsonpath(response_json, "$.data.repository")
+        data = response_json.get("data")
+        if data is None:
+            raise Exception("null repo")
+        repo = data.get("repository")
         if repo is None:
             raise Exception("null repo")
+        # errors = jsonpath.jsonpath(response_json, "$.errors")
         errors = response_json.get("errors")
         if errors is not None:
             raise Exception("errors")
         # 排除这些属性任何一个为true的，也有可能出现异常
-        exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
+        try:
+            exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
+        except Exception as e:
+            raise Exception("null filter property")
         return exclude
 
 
@@ -203,9 +211,17 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set
     payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
     crawled_count = 0
+    minute_crawl_count = 0
+    start_time = time.time()
     for ownerWithName in payload_repo_list:
         v4.get_repo(ownerWithName, out_dir_path)
         crawled_count += 1
+        minute_crawl_count += 1
+        cur_time = time.time()
+        if cur_time >= start_time + 60:
+            start_time = time.time()
+            print("\033[1;35m" + "rate: " + str(minute_crawl_count) + " repos/min \033[0m")
+            minute_crawl_count = 0
         print("has crawled: " + str(crawled_count) + "/" + str(len(payload_repo_list)))
 
 
