@@ -121,8 +121,14 @@ class GithubAPIv4(object):
             try:
                 response = requests.post(url=self.api, headers=headers, json={"query": query})
                 response_json = response.json()
-                # 过滤仓库，可能出现异常，内部捕获，跳过该仓库，并记录
-                exclude = False
+                # 处理errors
+                errors_status = self.handle_errors(response_json)
+                if errors_status is None:
+                    pass
+                elif errors_status == 'RATE_LIMITED':
+                    raise Exception(errors_status + ": " + str(headers))
+                else:
+                    raise Exception(errors_status)
                 # 如果过滤仓库时出现异常，视情况而定
                 try:
                     exclude = self.filter_repo(response_json)
@@ -167,6 +173,17 @@ class GithubAPIv4(object):
                     print("exception at: " + owner + "/" + repoName + ", retrying...")
                     continue
 
+    def handle_errors(self, response_json):
+        # 检测 RATE_LIMIT
+        errors = response_json.get('errors')
+        if errors is None:
+            return None
+        for error in errors:
+            if error.get('type') == 'RATE_LIMITED':
+                return 'RATE_LIMITED'
+            else:
+                return "other error type"
+
     def filter_repo(self, response_json):
         # repo = jsonpath.jsonpath(response_json, "$.data.repository")
         data = response_json.get("data")
@@ -176,9 +193,9 @@ class GithubAPIv4(object):
         if repo is None:
             raise Exception("null repo")
         # errors = jsonpath.jsonpath(response_json, "$.errors")
-        errors = response_json.get("errors")
-        if errors is not None:
-            raise Exception("errors")
+        # errors = response_json.get("errors")
+        # if errors is not None:
+        #     raise Exception("errors")
         # 排除这些属性任何一个为true的，也有可能出现异常
         try:
             exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
