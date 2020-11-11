@@ -121,18 +121,21 @@ class GithubAPIv4(object):
             try:
                 response = requests.post(url=self.api, headers=headers, json={"query": query})
                 response_json = response.json()
-                # 处理errors
+                # 处理errors，分情况处理
                 errors_status = self.handle_errors(response_json)
                 if errors_status is None:
                     pass
                 elif errors_status == 'RATE_LIMITED':
                     raise Exception(errors_status + ": " + str(headers))
                 elif errors_status == 'NOT_FOUND':
-                    raise Exception(errors_status + ": " + str(repo_full_name))
+                    log = errors_status + ": " + str(repo_full_name)
+                    print("\033[31m" + log + "\033[0m")
+                    logger.info(log)
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
+                    break
                 else:
                     raise Exception(errors_status)
-                # 往下执行的
-                # 如果过滤仓库时出现异常，视情况而定
+                # 如果过滤仓库时出现异常，分情况处理
                 try:
                     exclude = self.filter_repo(response_json)
                 except Exception as e:
@@ -140,22 +143,23 @@ class GithubAPIv4(object):
                     # null repo异常 记录exclude仓库，跳过
                     if str(e) == "null repo":
                         log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
-                        print(log)
+                        print("\033[31m" + log + "\033[0m")
                         logger.exception(log)
-                        write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
                         break
                     # 其他异常应该抛出重试
                     else:
                         raise Exception(e)
+                # 记录exclude仓库，跳过
                 if exclude is True:
+                    log = "exclude " + owner + "/" + repoName
+                    print("\033[31m" + log + "\033[0m")
                     logger.info("exclude " + owner + "/" + repoName)
-                    # 记录exclude仓库，跳过
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude_repo.txt", repo_full_name)
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
                     break
                 print("status_code: \033[32m" + str(response.status_code) + "\033[0m")
                 # 不是200异常重试
                 if response.status_code != 200:
-                    logger.info("request error at: " + owner + "/" + repoName)
                     raise Exception("status code is not 200! ")
                 # TODO 内部有4个字段可能有多页dependencyGraphManifests（嵌套dependencies），languages, repositoryTopics，但是一般都不会超过100个，所以这里统统不考虑了
                 # 写入文件
@@ -167,10 +171,11 @@ class GithubAPIv4(object):
             except Exception as e:
                 self.retry_times += 1
                 if self.retry_times >= 10:
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
                     self.retry_times = 0
                     break
                 else:
-                    print("exception at: " + owner + "/" + repoName + "message: \033[31m" + str(
+                    print("exception at: " + owner + "/" + repoName + ", message: \033[31m" + str(
                         e) + "\033[0m" + ", retrying...")
                     continue
 
@@ -224,22 +229,32 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     json_dic = read_json_file(json_file_path)
     repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
     ownerWithName_list = []
+    # 从url提取ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
     for url in repo_url_list:
         tokens = url.split("/")
-        owner_with_name = tokens[-2] + "/" + tokens[-1]
+        owner_with_name = tokens[3] + "/" + tokens[4]
         ownerWithName_list.append(owner_with_name)
     ownerWithName_set = set(ownerWithName_list)
-    # 扫描已有的
+    # 扫描data_repo_set exclude_repo_list retry_over_repo_list
     data_repo_set = get_data_repo_set(out_dir_path)
     try:
-        exclude_repo_list = read_file_lines(out_dir_path + "/exclude_repo.txt")
-    except FileExistsError as e:
+        exclude_repo_list = read_file_lines(out_dir_path + "/exclude/exclude_repo.txt")
+    except FileNotFoundError as e:
         exclude_repo_list = []
+    try:
+        retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
+    except FileNotFoundError as e:
+        retry_over_repo_list = []
     for i in range(len(exclude_repo_list)):
         exclude_repo_list[i] = exclude_repo_list[i].strip()
+    for i in range(len(retry_over_repo_list)):
+        retry_over_repo_list[i] = retry_over_repo_list[i].strip()
     exclude_repo_set = set(exclude_repo_list)
-    not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set
-    payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
+    retry_over_repo_set = set(retry_over_repo_list)
+    not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set - retry_over_repo_set
+    # 多机分派
+    # payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
+    payload_repo_list = not_exist_repo_set
     crawled_count = 0
     minute_crawl_count = 0
     start_time = time.time()
