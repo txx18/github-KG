@@ -19,7 +19,7 @@ public class RepoController {
         this.repoService = repoService;
     }
 
-    @RequestMapping(path = "/createRepo", produces = MediaType.APPLICATION_JSON_VALUE)
+    @RequestMapping(path = "/createRepoByJsonFile", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory createRepoByLocalJsonFile(@RequestParam("filePath") String filePath) {
         String extend = StrUtil.sub(filePath, -5, filePath.length());
         if (!".json".equals(extend)) {

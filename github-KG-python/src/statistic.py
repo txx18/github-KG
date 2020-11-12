@@ -3,6 +3,31 @@ import os
 from util.FileUtils import read_json_file
 import jsonpath
 import shutil
+import pandas as pd
+
+
+def stat_topic_set(repo_dir_path):
+    topic_list = []
+    for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
+        if os.path.splitext(repo_file)[1] != ".json":
+            continue
+        json_dic = read_json_file(repo_dir_path + "/" + repo_file)
+        dependencyGraphManifests_count = jsonpath.jsonpath(json_dic,
+                                                           "$.data.repository.dependencyGraphManifests.totalCount")[0]
+        if dependencyGraphManifests_count == 0:
+            continue
+        repo_topic_list = jsonpath.jsonpath(json_dic, "$.data.repository.repositoryTopics.nodes[*].topic.name")
+        if repo_topic_list is False:
+            continue
+        topic_list.extend(repo_topic_list)
+    topic_set = set(topic_list)
+    sorted_topic_set = list(topic_set)
+    sorted_topic_set.sort()
+    df = pd.DataFrame(columns=["topic"], data=sorted_topic_set)
+    df.to_csv(
+        r"C:\Disk_Dev\Repository\github-KG\github-KG-python\tx_data\resource\paperswithcode\sorted_topic_set_hasdfm.csv",
+        encoding='utf-8')
+    return sorted_topic_set
 
 
 def move_errors_repos(repo_dir_path, move_dir_path):
