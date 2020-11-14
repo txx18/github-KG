@@ -17,9 +17,12 @@ def createRepoByJsonFile_batch(dir_path):
         # 过滤没有依赖的repo
         if dgm_count == 0:
             continue
-        createRepoByJsonFile(dir_path + "/" + repo_file)
-        insert_repo_count += 1
-        print("all: " + str(i) + ", insert: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
+        response = createRepoByJsonFile(dir_path + "/" + repo_file)
+        if json.loads(response).get("status") == "success":
+            insert_repo_count += 1
+            print("index: " + str(i) + ", insert: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
+        else:
+            print(json.loads(response))
 
 
 def createRepoByJsonFile(file_path):

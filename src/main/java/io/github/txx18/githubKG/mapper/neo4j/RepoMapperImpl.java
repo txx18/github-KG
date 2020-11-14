@@ -21,7 +21,8 @@ public class RepoMapperImpl implements RepoMapper {
 
     @Override
     public int createRepoByJsonFile(String filePath) {
-        String query = "WITH\n" +
+        String query = "// 创建、增量更新\n" +
+                "WITH\n" +
                 "  'file:///" + filePath + "' AS url\n" +
                 "CALL apoc.load.json(url, '$.data.repository') YIELD value\n" +
                 "//return size(value.languages.nodes), value.languages.nodes[10].name, value.languages.edges[10].size\n" +
@@ -98,7 +99,7 @@ public class RepoMapperImpl implements RepoMapper {
                 "    SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "  )\n" +
                 ")\n" +
-                "// 与language的关系（同时遍历两个list好像不识别）\n" +
+                "// 与language的关系（同时遍历两个list好像插件不识别）\n" +
                 "FOREACH (i IN range(0, size(value.languages.nodes) - 1) |\n" +
                 "MERGE (lang:Language {name:value.languages.nodes[i].name})\n" +
                 "ON CREATE SET lang.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
@@ -106,9 +107,10 @@ public class RepoMapperImpl implements RepoMapper {
                 "MERGE (repo)- [uses:USES {size:value.languages.edges[i].size}]- >(lang)\n" +
                 "ON CREATE SET uses.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET uses.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                ")";
+                ")\n" +
+                "return 1";
         try (Session session = driver.session()) {
-            Result result = session.run(query);
+            Result result = session.writeTransaction(tx -> tx.run(query));
             return 1;
         } catch (Exception e) {
             e.printStackTrace();
