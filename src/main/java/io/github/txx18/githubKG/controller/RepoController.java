@@ -1,6 +1,7 @@
 package io.github.txx18.githubKG.controller;
 
 import cn.hutool.core.util.StrUtil;
+import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.model.ResponseSimpleFactory;
 import io.github.txx18.githubKG.service.RepoService;
 import org.springframework.http.MediaType;
@@ -25,11 +26,24 @@ public class RepoController {
         if (!".json".equals(extend)) {
             return ResponseSimpleFactory.createResponse("fail", "path invalid!");
         }
-        int res = repoService.createRepoByJsonFile(filePath);
+        int res = repoService.insertRepoByJsonFile(filePath);
         if (res != 1) {
             return ResponseSimpleFactory.createSimpleResponse("no");
         }
         return ResponseSimpleFactory.createSimpleResponse("ok");
     }
 
+    @RequestMapping(path = "/updateTfIdf", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseSimpleFactory updateTfIdf(@RequestParam("ownerWithName") String ownerWithName) {
+        int res = 0;
+        try {
+            res = repoService.updateTfIdf(ownerWithName);
+        } catch (DAOException e) {
+            e.printStackTrace();
+        }
+        if (res != 1) {
+            return ResponseSimpleFactory.createSimpleResponse("no");
+        }
+        return ResponseSimpleFactory.createSimpleResponse("ok");
+    }
 }

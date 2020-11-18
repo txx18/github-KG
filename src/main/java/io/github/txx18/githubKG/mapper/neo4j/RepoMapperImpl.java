@@ -1,12 +1,16 @@
 package io.github.txx18.githubKG.mapper.neo4j;
 
+import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.RepoMapper;
 import org.neo4j.driver.Driver;
+import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class RepoMapperImpl implements RepoMapper {
@@ -20,7 +24,7 @@ public class RepoMapperImpl implements RepoMapper {
     }
 
     @Override
-    public int createRepoByJsonFile(String filePath) {
+    public int insertRepoByJsonFile(String filePath) {
         String query = "// 创建、增量更新\n" +
                 "WITH\n" +
                 "  'file:///" + filePath + "' AS url\n" +
@@ -116,6 +120,52 @@ public class RepoMapperImpl implements RepoMapper {
             e.printStackTrace();
             logger.error("createRepoByJsonFile failed", e);
             return 0;
+        }
+    }
+
+    @Override
+    public int countRepoTotalCount() throws DAOException {
+        String query = "MATCH (total_repo:Repo)\n" +
+                "RETURN count(total_repo) AS total_repo_count";
+        Record record = null;
+        try (Session session = driver.session()) {
+            Result result = session.run(query);
+            while (result.hasNext()) {
+                record = result.next();
+            }
+            if (record == null) {
+                return -1;
+            }
+            return record.get("total_repo_count").asInt();
+        }catch (Exception e) {
+            e.printStackTrace();
+            String log = "failed";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+    @Override
+    public List<Object> listUnderPaths(String ownerWithName) throws DAOException {
+        String query = "MATCH (repo:Repo {nameWithOwner: 'tensorflow/tensorflow'})-[under:UNDER]->(topic:Topic)\n" +
+                "RETURN collect(under) AS under_list, collect(topic) AS topic_list";
+        Record record = null;
+        try (Session session = driver.session()) {
+            Result result = session.run(query);
+            while (result.hasNext()) {
+                record = result.next();
+            }
+            if (record == null) {
+                return null;
+            }
+            List<Object> under_list = record.get("under_list").asList();
+            List<Object> topic_list = record.get("topic_list").asList();
+            return topic_list;
+        }catch (Exception e) {
+            e.printStackTrace();
+            String log = "failed";
+            logger.error(log, e);
+            throw new DAOException(log);
         }
     }
 }

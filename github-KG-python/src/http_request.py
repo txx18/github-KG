@@ -4,6 +4,12 @@ from util.FileUtils import *
 import jsonpath
 
 
+def updateTfIdf(ownerWithName):
+    url = "http://localhost:8080/repo/updateTfIdf"
+    payload = {"ownerWithName": ownerWithName}
+    response = requests.post(url=url, data=payload).content.decode("utf-8")
+    return response
+
 def createRepoByJsonFile_batch(dir_path):
     insert_repo_count = 0
     for i, repo_file in enumerate(os.listdir(dir_path)):
