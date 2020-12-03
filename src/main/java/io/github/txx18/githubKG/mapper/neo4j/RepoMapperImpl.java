@@ -2,10 +2,7 @@ package io.github.txx18.githubKG.mapper.neo4j;
 
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.RepoMapper;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.Record;
-import org.neo4j.driver.Result;
-import org.neo4j.driver.Session;
+import org.neo4j.driver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -128,7 +125,7 @@ public class RepoMapperImpl implements RepoMapper {
         String query = "MATCH (total_repo:Repo)\n" +
                 "RETURN count(total_repo) AS total_repo_count";
         Record record = null;
-        try (Session session = driver.session()) {
+        try (Session session = driver.session(SessionConfig.builder().withDefaultAccessMode(AccessMode.READ).build())) {
             Result result = session.run(query);
             while (result.hasNext()) {
                 record = result.next();
@@ -146,21 +143,22 @@ public class RepoMapperImpl implements RepoMapper {
     }
 
     @Override
-    public List<Object> listUnderPaths(String ownerWithName) throws DAOException {
+    public List<String> listUnderPaths(String ownerWithName) throws DAOException {
         String query = "MATCH (repo:Repo {nameWithOwner: 'tensorflow/tensorflow'})-[under:UNDER]->(topic:Topic)\n" +
                 "RETURN collect(under) AS under_list, collect(topic) AS topic_list";
         Record record = null;
-        try (Session session = driver.session()) {
-            Result result = session.run(query);
-            while (result.hasNext()) {
+        try (Session session = driver.session(SessionConfig.builder().withDefaultAccessMode(AccessMode.READ).build())) {
+            List<String> underList = session.run(query).list(r -> r.get("under_list").asString());
+/*            while (result.hasNext()) {
                 record = result.next();
             }
             if (record == null) {
                 return null;
             }
+            // FIXME
             List<Object> under_list = record.get("under_list").asList();
-            List<Object> topic_list = record.get("topic_list").asList();
-            return topic_list;
+            List<Object> topic_list = record.get("topic_list").asList();*/
+            return underList;
         }catch (Exception e) {
             e.printStackTrace();
             String log = "failed";

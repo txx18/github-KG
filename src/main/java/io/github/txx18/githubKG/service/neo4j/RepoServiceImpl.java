@@ -44,7 +44,7 @@ public class RepoServiceImpl implements RepoService {
             return 0;
         }
         // 查询指定repo所有的path
-        List<Object> underPaths = repoMapper.listUnderPaths(ownerWithName);
+        List<String> underPaths = repoMapper.listUnderPaths(ownerWithName);
 
         return 1;
     }

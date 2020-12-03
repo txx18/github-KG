@@ -9,5 +9,5 @@ public interface RepoMapper {
 
     int countRepoTotalCount() throws DAOException;
 
-    List<Object> listUnderPaths(String ownerWithName) throws DAOException;
+    List<String> listUnderPaths(String ownerWithName) throws DAOException;
 }
