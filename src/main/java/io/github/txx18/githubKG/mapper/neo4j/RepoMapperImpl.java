@@ -79,7 +79,7 @@ public class RepoMapperImpl implements RepoMapper {
                 "    MERGE(package:Package {packageName: dependency_node.packageManager + '/' + dependency_node.packageName})\n" +
                 "      ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
                 "      package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    MERGE (repo)-[depends_package:DEPENDS_ON]->(package)\n" +
+                "    MERGE (repo)-[depends_package:DEPENDS_ON_PACKAGE]->(package)\n" +
                 "      ON CREATE SET depends_package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "    SET depends_package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
                 "    depends_package.requirements = dependency_node.requirements\n" +
@@ -91,7 +91,7 @@ public class RepoMapperImpl implements RepoMapper {
                 "                                       END})\n" +
                 "      ON CREATE SET dst_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
                 "      dst_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    MERGE (repo)-[depends_repo:DEPENDS_ON]->(dst_repo)\n" +
+                "    MERGE (repo)-[depends_repo:DEPENDS_ON_REPO]->(dst_repo)\n" +
                 "      ON CREATE SET depends_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "    SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "  // repo与package的DEVELOPS关系\n" +
