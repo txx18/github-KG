@@ -5,7 +5,7 @@ import io.github.txx18.githubKG.exception.DAOException;
 import java.util.List;
 
 public interface RepoMapper {
-    int insertRepoByJsonFile(String filePath);
+    int insertRepoByJsonFile(String filePath) throws DAOException;
 
     int countRepoTotalCount() throws DAOException;
 

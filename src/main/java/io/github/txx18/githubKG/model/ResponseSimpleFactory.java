@@ -28,8 +28,8 @@ public class ResponseSimpleFactory {
         this.data = data;
     }
 
-    public static ResponseSimpleFactory createResponse(String status){
-        return new ResponseSimpleFactory(status);
+    public static ResponseSimpleFactory createResponse(String msg){
+        return new ResponseSimpleFactory(msg);
     }
 
     public static ResponseSimpleFactory createResponse(String status, String msg){

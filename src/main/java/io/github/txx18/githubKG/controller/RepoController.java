@@ -21,12 +21,18 @@ public class RepoController {
     }
 
     @RequestMapping(path = "/createRepoByJsonFile", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseSimpleFactory createRepoByLocalJsonFile(@RequestParam("filePath") String filePath) {
+    public ResponseSimpleFactory createRepoByLocalJsonFile(@RequestParam("filePath") String filePath)  {
         String extend = StrUtil.sub(filePath, -5, filePath.length());
         if (!".json".equals(extend)) {
             return ResponseSimpleFactory.createResponse("fail", "path invalid!");
         }
-        int res = repoService.insertRepoByJsonFile(filePath);
+        int res = 0;
+        try {
+            res = repoService.insertRepoByJsonFile(filePath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseSimpleFactory.createResponse(e.getMessage());
+        }
         if (res != 1) {
             return ResponseSimpleFactory.createSimpleResponse("no");
         }

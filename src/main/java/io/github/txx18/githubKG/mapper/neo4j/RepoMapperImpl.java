@@ -21,7 +21,7 @@ public class RepoMapperImpl implements RepoMapper {
     }
 
     @Override
-    public int insertRepoByJsonFile(String filePath) {
+    public int insertRepoByJsonFile(String filePath) throws DAOException {
         String query = "// 创建、增量更新\n" +
                 "WITH\n" +
                 "  'file:///" + filePath + "' AS url\n" +
@@ -114,9 +114,9 @@ public class RepoMapperImpl implements RepoMapper {
             Result result = session.writeTransaction(tx -> tx.run(query));
             return 1;
         } catch (Exception e) {
-            e.printStackTrace();
-            logger.error("createRepoByJsonFile failed", e);
-            return 0;
+            String log = "createRepoByJsonFile failed";
+            logger.error(log, e);
+            throw new DAOException(log);
         }
     }
 
@@ -125,7 +125,7 @@ public class RepoMapperImpl implements RepoMapper {
         String query = "MATCH (total_repo:Repo)\n" +
                 "RETURN count(total_repo) AS total_repo_count";
         Record record = null;
-        try (Session session = driver.session(SessionConfig.builder().withDefaultAccessMode(AccessMode.READ).build())) {
+        try (Session session = driver.session()) {
             Result result = session.run(query);
             while (result.hasNext()) {
                 record = result.next();
@@ -134,8 +134,7 @@ public class RepoMapperImpl implements RepoMapper {
                 return -1;
             }
             return record.get("total_repo_count").asInt();
-        }catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception e) {
             String log = "failed";
             logger.error(log, e);
             throw new DAOException(log);
@@ -159,8 +158,7 @@ public class RepoMapperImpl implements RepoMapper {
             List<Object> under_list = record.get("under_list").asList();
             List<Object> topic_list = record.get("topic_list").asList();*/
             return underList;
-        }catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception e) {
             String log = "failed";
             logger.error(log, e);
             throw new DAOException(log);

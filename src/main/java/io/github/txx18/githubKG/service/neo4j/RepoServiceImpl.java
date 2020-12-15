@@ -20,18 +20,19 @@ public class RepoServiceImpl implements RepoService {
     }
 
     @Override
-    public int insertRepoByJsonFile(String filePath) {
+    public int insertRepoByJsonFile(String filePath) throws Exception {
         // 过滤 repo为空的仓库，没有依赖的repo
         FileReader fileReader = new FileReader(filePath, "UTF-8");
         String jsonStr = fileReader.readString();
         Object repo = JsonPath.read(jsonStr, "$.data.repository");
         if (repo == null) {
-            return 0;
+            throw new Exception("null repo");
         }
         int dgmCount = JsonPath.read(jsonStr, "$.data.repository.dependencyGraphManifests.totalCount");
         if (dgmCount == 0) {
-            return 0;
+            throw new Exception("dependencyGraphManifests.totalCount == 0");
         }
+        // 其余执行插入
         return repoMapper.insertRepoByJsonFile(filePath);
     }
 

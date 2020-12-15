@@ -3,6 +3,13 @@ import requests
 from util.FileUtils import *
 import jsonpath
 
+def importEvaluationTablesJson(file_path):
+    url = "http://localhost:8080/paperswithcode/importEvaluationTablesJson"
+    payload = {"filePath": file_path}
+    response = requests.post(url=url, data=payload).content.decode("utf-8")
+    if json.loads(response).get("status") != "success":
+        print(json.loads(response))
+        return
 
 def updateTfIdf(ownerWithName):
     url = "http://localhost:8080/repo/updateTfIdf"
@@ -26,9 +33,10 @@ def createRepoByJsonFile_batch(dir_path):
         response = createRepoByJsonFile(dir_path + "/" + repo_file)
         if json.loads(response).get("status") == "success":
             insert_repo_count += 1
-            print("index: " + str(i) + ", insert: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
+            print("file_index: " + str(i) + ", insert: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
         else:
             print(json.loads(response))
+            break
 
 
 def createRepoByJsonFile(file_path):
