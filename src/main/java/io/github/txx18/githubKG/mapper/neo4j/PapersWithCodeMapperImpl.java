@@ -138,13 +138,14 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeModelPaper(HashMap<String, Object> params) throws DAOException {
-        String query = "MATCH (model:Model {name: $modelName})\n" +
-                "MERGE (paper:Paper {paperUrl: $paperUrl})\n" +
+        String query = "// model - MODEL_INTRODUCED_IN_PAPER - paper\n" +
+                "MATCH (model:Model {name: $modelName})\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.paperTitle = $paperTitle\n" +
                 "SET paper.paperDate = $paperDate\n" +
-                "MERGE (model)-[model_in_paper:MODEL_IN_PAPER]->(paper)\n" +
+                "MERGE (model)-[model_in_paper:MODEL_INTRODUCED_IN_PAPER]->(paper)\n" +
                 "  ON CREATE SET model_in_paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET model_in_paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
         String modelName = (String) params.get("modelName");
@@ -193,12 +194,12 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeModelRepo(Map<String, Object> params) throws DAOException {
-        String query = "// Model - MODEL_IMPLEMENTS_BY_REPO - Repo\n" +
+        String query = "// Model - MODEL_IMPLEMENTED_BY_REPO -> Repo\n" +
                 "MATCH (model:Model {name: $modelName})\n" +
                 "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
                 "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (model)-[implements:MODEL_IMPLEMENTS_BY_REPO]->(repo)\n" +
+                "MERGE (model)-[implements:MODEL_IMPLEMENTED_BY_REPO]->(repo)\n" +
                 "  ON CREATE SET implements.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET implements.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
         String modelName = (String) params.get("modelName");
@@ -218,8 +219,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergePaperRepo(Map<String, Object> params) throws DAOException {
-        String query = "//Paper - PAPER_LINKS_TO_REPO - Repo\n" +
-                "MERGE (paper:Paper {paperUrl: $paperUrlAbs})\n" +
+        String query = "// Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.paperTitle = $paperTitle\n" +
@@ -230,7 +231,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
                 "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (paper)-[link:PAPER_LINKS_TO_REPO]->(repo)\n" +
+                "MERGE (paper)-[link:PAPER_IMPLEMENTED_BY_REPO]->(repo)\n" +
                 "  ON CREATE SET link.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET link.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET link.mentionedInPaper = $mentionedInPaper\n" +
@@ -250,7 +251,6 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 tx.run(query, parameters(
                         "paperswithcodeUrl", paperswithcodeUrl,
                         "paperTitle", paperTitle,
-                        "paperTitle", paperTitle,
                         "paperArxivId", paperArxivId,
                         "paperUrlAbs", paperUrlAbs,
                         "paperUrlPdf", paperUrlPdf,
@@ -266,6 +266,12 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
             logger.error(log, e);
             throw new DAOException(log);
         }
+        return 1;
+    }
+
+    @Override
+    public int mergeMethodPaper(Map<String, Object> params) {
+        String query = "";
         return 1;
     }
 }

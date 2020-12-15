@@ -12,7 +12,7 @@ def importMethodsJson(file_path):
         return
 
 def importLinksBetweenPapersAndCodeJson(file_path):
-    url = "http://localhost:8080/paperswithcode/importLinksBetweenPapersAndCode"
+    url = "http://localhost:8080/paperswithcode/importLinksBetweenPapersAndCodeJson"
     payload = {"filePath": file_path}
     response = requests.post(url=url, data=payload).content.decode("utf-8")
     if json.loads(response).get("status") != "success":

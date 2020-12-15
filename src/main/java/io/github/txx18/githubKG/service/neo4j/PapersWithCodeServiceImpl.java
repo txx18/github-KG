@@ -94,7 +94,27 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
     @Override
     public int importMethodsJson(String filePath) {
-        return 0;
+        JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
+        for (int i = 0; i < jsonArray.size(); i++) {
+            JSONObject jsonObject = (JSONObject) jsonArray.get(i);
+            String paperswithcodeUrl = (String) jsonObject.get("url");
+            String name = (String) jsonObject.get("name");
+            String fullName = (String) jsonObject.get("full_name");
+            String description = (String) jsonObject.get("description");
+            String paperTitle = (String) jsonObject.get("paper");
+            String introducedYear = (String) jsonObject.get("introduced_year");
+            Map<String, Object> params = new HashMap<>();
+            params.put("paperswithcodeUrl", paperswithcodeUrl);
+            params.put("name", name);
+            params.put("fullName", fullName);
+            params.put("description", description);
+            params.put("paperTitle", paperTitle);
+            params.put("introducedYear", introducedYear);
+            // todo Method - METHOD_INTRODUCED_IN_PAPER Paper
+            int res1 = papersWithCodeMapper.mergeMethodPaper(params);
+            JSONArray collections = ((JSONArray) jsonObject.get("collections"));
+        }
+        return 1;
     }
 
 
@@ -125,10 +145,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
-     * Task & Model 的关系
-     * Model - MODEL_HAS_DATASET - Dataset 的关系
-     * Model - MODEL_IN_PAPER - Paper的关系
-     * Model - MODEL_IMPLEMENTS_BY_REPO - Repo
      * <p>
      * 'model_links' 都为[]
      *
@@ -153,7 +169,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("modelName", modelName);
             int res1 = papersWithCodeMapper.mergeTaskModel(params);
 //            System.out.println("task: " + taskName + " - model: " + modelName);
-            // Model & Dataset 的关系，并且 Dataset & Model之间把metric作为属性
+            // Model - MODEL_ON_DATASET -> Dataset
             JSONObject metrics = (JSONObject) model.get("metrics");
             Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
             params.put("datasetName", datasetName);
@@ -165,7 +181,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 int res2 = papersWithCodeMapper.createModelDataset(params);
             }
 //            System.out.println("model: " + modelName + " - dataset: " + datasetName);
-            // Model & paper 的关系
+            // model - MODEL_INTRODUCED_IN_PAPER -> paper
             String paperUrl = (String) model.get("paper_url");
             if (!StrUtil.isBlankIfStr(paperUrl)) {
                 String paperTitle = (String) model.get("paper_title");
@@ -176,7 +192,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 int res3 = papersWithCodeMapper.mergeModelPaper(params);
 //                System.out.println("model: " + modelName + " - paper: " + paperUrl);
             }
-            // Model - MODEL_IMPLEMENTS_BY_REPO - Repo
+            // Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
             JSONArray codeLinks = (JSONArray) model.get("code_links");
             for (int j = 0; j < codeLinks.size(); j++) {
                 JSONObject codeLink = (JSONObject) codeLinks.get(j);
@@ -193,7 +209,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
-     * Task & Dataset & Model & Paper & Metric & Repo的关系
      * 字段 'dataset_citations' 'dataset_links' 'subdatasets'都为[]
      *
      * @param jsonObject
@@ -209,7 +224,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 continue;
             }
             String description = (String) dataset.get("description");
-            // Task 和 Dataset 的关系
+            // Task - TASK_HAS_DATASET -> Dataset
             Map<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("datasetName", datasetName);
@@ -245,11 +260,11 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 continue;
             }
             String description = (String) jsonObject.get("description");
+            // Task - TASK_HAS_SUBTASK -> Subtask
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("subtaskName", subtaskName);
             params.put("description", description);
-            // Task & Subtask 的关系
             int res = papersWithCodeMapper.mergeTaskSubtask(params);
         }
         // 递归嵌套
@@ -270,7 +285,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             return 0;
         }
         JSONArray categories = (JSONArray) jsonObject.get("categories");
-        // 即使同义词是一个列表，但它不重要，也作为属性转为字符串存储
         String description = (String) jsonObject.get("description");
         // 对于subtask，categories字段是[]，Jackson解析为size为0的JSONArray
         for (int j = 0; j < categories.size(); j++) {
@@ -278,6 +292,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             if (StrUtil.isBlankIfStr(category)) {
                 continue;
             }
+            // Task - TASK_UNDER_CATEGORY -> Category
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("category", category);
