@@ -1,5 +1,6 @@
 package io.github.txx18.githubKG.service.neo4j;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -37,8 +38,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
      * <p>
      * 判空逻辑：
      * 目标：不管是Null还是size=0，在KG里面都是“不处理（不merge）”，这样查询结果就是“查不到”，用户清楚查不到不代表“没有”
-     * 1、实体和主键是不能为null的，不然没有必要创建它了；而一个()-[]-()中部分为null需要做一些处理，不能说有一个为null全都不要了
-     * 写完mergeTaskCategory和mergeTaskDataset之后，我发现Jackson反序列化时会自动忽略值为null的字段，不像json.load()（看完整版就去看python的），那其实没必要判null了
+     * 1、实体的主键是 不能为null也不能为“空串” 的，不然没有必要创建它了；而一个()-[]-()中有部分为null需要做一些处理，不能说有一个为null全都不要了
+     * 写完mergeTaskCategory和mergeTaskDataset之后，我发现Jackson反序列化时会自动忽略值为null的字段，不像json.load()（看完整版就去看python的），
+     * 那其实没必要判null了，但是判空串 还是有必要的
      * 2、对于size=0的集合，自然不会遍历，也就自动“不处理”了
      * <p>
      * 调用树：平级则并列，嵌套则嵌套调用
@@ -64,10 +66,16 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             JSONObject jsonObject = (JSONObject) jsonArray.get(i);
             // Task 和 Category的关系
             int resTaskCategory = mergeTaskCategory(jsonObject);
+            if (resTaskCategory == 0) {
+                continue;
+            }
             // Task & Dataset & Model & Paper & Metric & Repo的关系
-            int resTaskDataset = mergeDataset(jsonObject);
-            // Task 和 Subtasks的关系 subtask是task的递归嵌套，水比较深，最后搞
-            int resTaskSubtask = mergeSubtask(jsonObject);
+            int resDataset = mergeDataset(jsonObject);
+            if (resDataset == 0) {
+                continue;
+            }
+            // Task 和 Subtasks的关系 subtask是task的递归嵌套
+            int resSubtask = mergeSubtask(jsonObject);
         }
         return 1;
     }
@@ -91,21 +99,29 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         for (int i = 0; i < rows.size(); i++) {
             JSONObject model = (JSONObject) rows.get(i);
             String modelName = (String) model.get("model_name");
+            if (StrUtil.isBlankIfStr(modelName)) {
+                continue;
+            }
             JSONObject metrics = (JSONObject) model.get("metrics");
             Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
-            // Task & Dataset & Model 的关系， 并且 Dataset & Model之间把metric作为属性
+            // Task & Model 的关系
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("modelName", modelName);
             int res1 = papersWithCodeMapper.mergeTaskModel(params);
             System.out.println("task: " + taskName + " - model: " + modelName);
+            // Model & Dataset 的关系，并且 Dataset & Model之间把metric作为属性
             params.put("datasetName", datasetName);
             params.put("metricEntries", metricEntries);
             int res2 = papersWithCodeMapper.createModelDataset(params);
             System.out.println("model: " + modelName + " - dataset: " + datasetName);
             // Model & paper 的关系
-            String paperTitle = (String) model.get("paper_title");
             String paperUrl = (String) model.get("paper_url");
+            // 注意一定要在model判空后面
+            if (StrUtil.isBlankIfStr(paperUrl)) {
+                continue;
+            }
+            String paperTitle = (String) model.get("paper_title");
             String paperDate = (String) model.get("paper_date");
             params.put("paperTitle", paperTitle);
             params.put("paperUrl", paperUrl);
@@ -130,6 +146,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         for (int i = 0; i < datasets.size(); i++) {
             JSONObject dataset = (JSONObject) datasets.get(i);
             String datasetName = (String) dataset.get("dataset");
+            if (StrUtil.isBlankIfStr(datasetName)) {
+                continue;
+            }
             String description = (String) dataset.get("description");
             // Task 和 Dataset 的关系
             Map<String, Object> params = new HashMap<>();
@@ -163,6 +182,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         for (int j = 0; j < subtasks.size(); j++) {
             JSONObject subtask = (JSONObject) subtasks.get(j);
             String subtaskName = ((String) subtask.get("task"));
+            if (StrUtil.isBlankIfStr(subtaskName)) {
+                continue;
+            }
             String description = (String) jsonObject.get("description");
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
@@ -184,12 +206,18 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
      */
     private int mergeTaskCategory(JSONObject jsonObject) throws Exception {
         String taskName = (String) jsonObject.get("task");
+        if (StrUtil.isBlankIfStr(taskName)) {
+            return 0;
+        }
         JSONArray categories = (JSONArray) jsonObject.get("categories");
         // 即使同义词是一个列表，但它不重要，也作为属性转为字符串存储
         String description = (String) jsonObject.get("description");
         // 对于subtask，categories字段是[]，Jackson解析为size为0的JSONArray
         for (int j = 0; j < categories.size(); j++) {
             String category = (String) categories.get(j);
+            if (StrUtil.isBlankIfStr(category)) {
+                continue;
+            }
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("category", category);

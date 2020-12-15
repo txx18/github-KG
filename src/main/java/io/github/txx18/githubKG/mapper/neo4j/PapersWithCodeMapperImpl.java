@@ -184,7 +184,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
         String modelName = (String) params.get("modelName");
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
-                tx.run(query.toString(), parameters("taskName", taskName, "modelName", modelName));
+                tx.run(query, parameters("taskName", taskName, "modelName", modelName));
                 return 1;
             });
         } catch (Exception e) {
