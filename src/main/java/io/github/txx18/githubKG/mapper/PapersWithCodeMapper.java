@@ -17,4 +17,8 @@ public interface PapersWithCodeMapper {
     int mergeModelPaper(HashMap<String, Object> params) throws DAOException;
 
     int mergeTaskModel(HashMap<String, Object> params) throws DAOException;
+
+    int mergeModelRepo(Map<String, Object> params) throws DAOException;
+
+    int mergePaperRepo(Map<String, Object> params) throws DAOException;
 }

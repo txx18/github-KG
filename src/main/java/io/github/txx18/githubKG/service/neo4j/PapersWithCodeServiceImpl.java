@@ -55,7 +55,52 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
     }
 
     /**
+     * Paper - PAPER_LINKS_TO_REPO - Repo
+     *
+     * @param jsonArray
+     * @return
+     */
+    @Override
+    public int importLinksBetweenPapersAndCodeJson(String filePath) throws DAOException {
+        JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
+        for (int i = 0; i < jsonArray.size(); i++) {
+            JSONObject jsonObject = (JSONObject) jsonArray.get(i);
+            String paperswithcodeUrl = (String) jsonObject.get("paper_url");
+            String paperTitle = (String) jsonObject.get("paper_title");
+            String paperArxivId = (String) jsonObject.get("paper_arxiv_id");
+            String paperUrlAbs = (String) jsonObject.get("paper_url_abs");
+            String paperUrlPdf = (String) jsonObject.get("paper_url_pdf");
+            String repoUrl = (String) jsonObject.get("repo_url");
+            String[] tokens = StrUtil.split(repoUrl, "/");
+            String nameWithOwner = tokens[3] + "/" + tokens[4];
+            String mentionedInPaper = jsonObject.get("mentioned_in_paper").toString();
+            String mentionedInGithub = (String) jsonObject.get("mentioned_in_github").toString();
+            String framework = (String) jsonObject.get("framework");
+            HashMap<String, Object> params = new HashMap<>();
+            params.put("paperswithcodeUrl", paperswithcodeUrl);
+            params.put("paperTitle", paperTitle);
+            params.put("paperArxivId", paperArxivId);
+            params.put("paperUrlAbs", paperUrlAbs);
+            params.put("paperUrlPdf", paperUrlPdf);
+            params.put("nameWithOwner", nameWithOwner);
+            params.put("mentionedInPaper", mentionedInPaper);
+            params.put("mentionedInGithub", mentionedInGithub);
+            params.put("framework", framework);
+            int res = papersWithCodeMapper.mergePaperRepo(params);
+            System.out.println("mergePaperRepo: " + i + "/" + jsonArray.size());
+        }
+        return 1;
+    }
+
+    @Override
+    public int importMethodsJson(String filePath) {
+        return 0;
+    }
+
+
+    /**
      * JSON最外层是以Task出发的
+     *
      * @param jsonArray
      * @return
      * @throws Exception
@@ -71,11 +116,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             }
             // Task & Dataset & Model & Paper & Metric & Repo的关系
             int resDataset = mergeDataset(jsonObject);
-            if (resDataset == 0) {
-                continue;
-            }
             // Task 和 Subtasks的关系 subtask是task的递归嵌套
             int resSubtask = mergeSubtask(jsonObject);
+            System.out.println("mergeTask: " + i + "/" + jsonArray.size());
         }
         return 1;
     }
@@ -83,16 +126,18 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
     /**
      * Task & Model 的关系
-     * Model & Dataset 的关系
-     * Model & Paper的关系
-     *
+     * Model - MODEL_HAS_DATASET - Dataset 的关系
+     * Model - MODEL_IN_PAPER - Paper的关系
+     * Model - MODEL_IMPLEMENTS_BY_REPO - Repo
+     * <p>
      * 'model_links' 都为[]
+     *
      * @param jsonObject
      * @param dataset
      * @return
      * @throws DAOException
      */
-    private int mergeModelPaper(JSONObject jsonObject, JSONObject dataset) throws DAOException {
+    private int mergeModelPaperRepo(JSONObject jsonObject, JSONObject dataset) throws DAOException {
         String taskName = (String) jsonObject.get("task");
         JSONArray rows = (JSONArray) ((JSONObject) dataset.get("sota")).get("rows");
         String datasetName = (String) dataset.get("dataset");
@@ -102,32 +147,46 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             if (StrUtil.isBlankIfStr(modelName)) {
                 continue;
             }
-            JSONObject metrics = (JSONObject) model.get("metrics");
-            Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
             // Task & Model 的关系
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("modelName", modelName);
             int res1 = papersWithCodeMapper.mergeTaskModel(params);
-            System.out.println("task: " + taskName + " - model: " + modelName);
+//            System.out.println("task: " + taskName + " - model: " + modelName);
             // Model & Dataset 的关系，并且 Dataset & Model之间把metric作为属性
+            JSONObject metrics = (JSONObject) model.get("metrics");
+            Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
             params.put("datasetName", datasetName);
-            params.put("metricEntries", metricEntries);
-            int res2 = papersWithCodeMapper.createModelDataset(params);
-            System.out.println("model: " + modelName + " - dataset: " + datasetName);
+            for (Map.Entry<String, Object> metricEntry : metricEntries) {
+                String metricName = metricEntry.getKey();
+                String metricValue = metricEntry.getValue().toString();
+                params.put("metricName", metricName);
+                params.put("metricValue", metricValue);
+                int res2 = papersWithCodeMapper.createModelDataset(params);
+            }
+//            System.out.println("model: " + modelName + " - dataset: " + datasetName);
             // Model & paper 的关系
             String paperUrl = (String) model.get("paper_url");
-            // 注意一定要在model判空后面
-            if (StrUtil.isBlankIfStr(paperUrl)) {
-                continue;
+            if (!StrUtil.isBlankIfStr(paperUrl)) {
+                String paperTitle = (String) model.get("paper_title");
+                String paperDate = (String) model.get("paper_date");
+                params.put("paperTitle", paperTitle);
+                params.put("paperUrl", paperUrl);
+                params.put("paperDate", paperDate);
+                int res3 = papersWithCodeMapper.mergeModelPaper(params);
+//                System.out.println("model: " + modelName + " - paper: " + paperUrl);
             }
-            String paperTitle = (String) model.get("paper_title");
-            String paperDate = (String) model.get("paper_date");
-            params.put("paperTitle", paperTitle);
-            params.put("paperUrl", paperUrl);
-            params.put("paperDate", paperDate);
-            int res3 = papersWithCodeMapper.mergeModelPaper(params);
-            System.out.println("model: " + modelName + " - paper: " + paperUrl);
+            // Model - MODEL_IMPLEMENTS_BY_REPO - Repo
+            JSONArray codeLinks = (JSONArray) model.get("code_links");
+            for (int j = 0; j < codeLinks.size(); j++) {
+                JSONObject codeLink = (JSONObject) codeLinks.get(j);
+                String nameWithOwner = (String) codeLink.get("title");
+                params.put("nameWithOwner", nameWithOwner);
+                if (!StrUtil.isBlankIfStr(nameWithOwner)) {
+                    int res4 = papersWithCodeMapper.mergeModelRepo(params);
+//                    System.out.println("model: " + modelName + " - repo: " + nameWithOwner);
+                }
+            }
         }
         return 1;
     }
@@ -156,9 +215,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("datasetName", datasetName);
             params.put("description", description);
             int res = papersWithCodeMapper.mergeTaskDataset(params);
-            System.out.println("task: " + taskName + " - dataset:" + datasetName);
+//            System.out.println("task: " + taskName + " - dataset:" + datasetName);
             // 嵌套关系，如果要分方法写的话，也嵌套调用
-            int resModel = mergeModelPaper(jsonObject, dataset);
+            int resModel = mergeModelPaperRepo(jsonObject, dataset);
         }
         return 1;
     }
@@ -200,6 +259,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
     /**
      * Task & Category的关系
+     *
      * @param jsonObject
      * @return
      * @throws Exception
@@ -223,7 +283,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("category", category);
             params.put("description", description);
             int res = papersWithCodeMapper.mergeTaskCategory(params);
-            System.out.println("task: " + taskName + " - category:" + category);
+//            System.out.println("task: " + taskName + " - category:" + category);
         }
         return 1;
     }

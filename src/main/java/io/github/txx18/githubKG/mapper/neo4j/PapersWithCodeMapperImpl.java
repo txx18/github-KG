@@ -10,7 +10,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.neo4j.driver.Values.parameters;
 
@@ -120,22 +119,19 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 "SET model_on_dataset.metricValue = $metricValue";
         String datasetName = (String) params.get("datasetName");
         String modelName = (String) params.get("modelName");
-        Set<Map.Entry<String, Object>> metricEntries = (Set<Map.Entry<String, Object>>) params.get("metricEntries");
-        for (Map.Entry<String, Object> metricEntry : metricEntries) {
-            String metricName = metricEntry.getKey();
-            String metricValue = metricEntry.getValue().toString();
-            try (Session session = driver.session()) {
-                session.writeTransaction(tx -> {
-                    tx.run(query, parameters("modelName", modelName, "datasetName", datasetName,
-                            "metricName", metricName, "metricValue", metricValue));
-                    return 1;
-                });
-            } catch (Exception e) {
-                String log =
-                        "mergeModelDataset failed! model: " + modelName + " - dataset: " + datasetName;
-                logger.error(log, e);
-                throw new DAOException(log);
-            }
+        String metricName = (String) params.get("metricName");
+        String metricValue = (String) params.get("metricValue");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters("modelName", modelName, "datasetName", datasetName,
+                        "metricName", metricName, "metricValue", metricValue));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log =
+                    "mergeModelDataset failed! model: " + modelName + " - dataset: " + datasetName;
+            logger.error(log, e);
+            throw new DAOException(log);
         }
         return 1;
     }
@@ -188,7 +184,85 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 return 1;
             });
         } catch (Exception e) {
-            String log = "mergeTaskModel failed, task: " + taskName + "- model: " + modelName;
+            String log = "mergeTaskModel failed! task: " + taskName + "- model: " + modelName;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeModelRepo(Map<String, Object> params) throws DAOException {
+        String query = "// Model - MODEL_IMPLEMENTS_BY_REPO - Repo\n" +
+                "MATCH (model:Model {name: $modelName})\n" +
+                "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (model)-[implements:MODEL_IMPLEMENTS_BY_REPO]->(repo)\n" +
+                "  ON CREATE SET implements.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET implements.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        String modelName = (String) params.get("modelName");
+        String nameWithOwner = (String) params.get("nameWithOwner");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters("modelName", modelName, "nameWithOwner", nameWithOwner));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeModelRepo failed! modelName: " + modelName + "- nameWithOwner: " + nameWithOwner;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergePaperRepo(Map<String, Object> params) throws DAOException {
+        String query = "//Paper - PAPER_LINKS_TO_REPO - Repo\n" +
+                "MERGE (paper:Paper {paperUrl: $paperUrlAbs})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.paperTitle = $paperTitle\n" +
+                "SET paper.paperswithcodeUrl = $paperswithcodeUrl\n" +
+                "SET paper.paperArxivId = $paperArxivId\n" +
+                "SET paper.paperUrlAbs = $paperUrlAbs\n" +
+                "SET paper.paperUrlPdf = $paperUrlPdf\n" +
+                "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (paper)-[link:PAPER_LINKS_TO_REPO]->(repo)\n" +
+                "  ON CREATE SET link.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET link.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET link.mentionedInPaper = $mentionedInPaper\n" +
+                "SET link.mentionedInGithub = $mentionedInGithub\n" +
+                "SET link.framework = $framework";
+        String paperswithcodeUrl = (String) params.get("paperswithcodeUrl");
+        String paperTitle = (String) params.get("paperTitle");
+        String paperArxivId = (String) params.get("paperArxivId");
+        String paperUrlAbs = (String) params.get("paperUrlAbs");
+        String paperUrlPdf = (String) params.get("paperUrlPdf");
+        String nameWithOwner = (String) params.get("nameWithOwner");
+        String mentionedInPaper = (String) params.get("mentionedInPaper");
+        String mentionedInGithub = (String) params.get("mentionedInGithub");
+        String framework = (String) params.get("framework");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "paperswithcodeUrl", paperswithcodeUrl,
+                        "paperTitle", paperTitle,
+                        "paperTitle", paperTitle,
+                        "paperArxivId", paperArxivId,
+                        "paperUrlAbs", paperUrlAbs,
+                        "paperUrlPdf", paperUrlPdf,
+                        "nameWithOwner", nameWithOwner,
+                        "mentionedInPaper", mentionedInPaper,
+                        "mentionedInGithub", mentionedInGithub,
+                        "framework", framework
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergePaperRepo failed! paper: " + paperUrlAbs + "- repo: " + nameWithOwner;
             logger.error(log, e);
             throw new DAOException(log);
         }
