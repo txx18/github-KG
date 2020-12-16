@@ -7,5 +7,5 @@ public interface PapersWithCodeService {
 
     int importLinksBetweenPapersAndCodeJson(String filePath) throws DAOException;
 
-    int importMethodsJson(String filePath);
+    int importMethodsJson(String filePath) throws DAOException;
 }

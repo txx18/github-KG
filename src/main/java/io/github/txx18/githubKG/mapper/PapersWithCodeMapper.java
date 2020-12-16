@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public interface PapersWithCodeMapper {
-    int mergeTaskCategory(Map<String, Object> params) throws DAOException;
+    int mergeCategoryTask(Map<String, Object> params) throws DAOException;
 
     int mergeTaskSubtask(Map<String, Object> params) throws DAOException;
 
@@ -22,5 +22,15 @@ public interface PapersWithCodeMapper {
 
     int mergePaperRepo(Map<String, Object> params) throws DAOException;
 
-    int mergeMethodPaper(Map<String, Object> params);
+    int mergeMethodPaper(Map<String, Object> params) throws DAOException;
+
+    int mergeTask(Map<String, Object> params) throws DAOException;
+
+    int mergePaper(Map<String, Object> params) throws DAOException;
+
+    int mergeMethod(Map<String, Object> params) throws DAOException;
+
+    int mergeCollectionMethod(Map<String, Object> params) throws DAOException;
+
+    int mergeAreaCollection(Map<String, Object> params) throws DAOException;
 }

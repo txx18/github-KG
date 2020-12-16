@@ -51,11 +51,11 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
     @Override
     public int importEvaluationTablesJson(String filePath) throws Exception {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
-        return mergeTask(jsonArray);
+        return mergeTaskUnion(jsonArray);
     }
 
     /**
-     * Paper - PAPER_LINKS_TO_REPO - Repo
+     * Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
      *
      * @param jsonArray
      * @return
@@ -67,21 +67,31 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             JSONObject jsonObject = (JSONObject) jsonArray.get(i);
             String paperswithcodeUrl = (String) jsonObject.get("paper_url");
             String paperTitle = (String) jsonObject.get("paper_title");
+            // paperTitle为空则跳过，否则先merge paper
+            if (StrUtil.isBlankIfStr(paperTitle)) {
+                continue;
+            }
             String paperArxivId = (String) jsonObject.get("paper_arxiv_id");
             String paperUrlAbs = (String) jsonObject.get("paper_url_abs");
             String paperUrlPdf = (String) jsonObject.get("paper_url_pdf");
-            String repoUrl = (String) jsonObject.get("repo_url");
-            String[] tokens = StrUtil.split(repoUrl, "/");
-            String nameWithOwner = tokens[3] + "/" + tokens[4];
-            String mentionedInPaper = jsonObject.get("mentioned_in_paper").toString();
-            String mentionedInGithub = (String) jsonObject.get("mentioned_in_github").toString();
-            String framework = (String) jsonObject.get("framework");
             HashMap<String, Object> params = new HashMap<>();
             params.put("paperswithcodeUrl", paperswithcodeUrl);
             params.put("paperTitle", paperTitle);
             params.put("paperArxivId", paperArxivId);
             params.put("paperUrlAbs", paperUrlAbs);
             params.put("paperUrlPdf", paperUrlPdf);
+            int resPaper = papersWithCodeMapper.mergePaper(params);
+            System.out.println("mergePaper: " + i + "/" + jsonArray.size());
+            String repoUrl = (String) jsonObject.get("repo_url");
+            // repoUrl为空则跳过
+            if (StrUtil.isBlankIfStr(repoUrl)) {
+                continue;
+            }
+            String[] tokens = StrUtil.split(repoUrl, "/");
+            String nameWithOwner = tokens[3] + "/" + tokens[4];
+            String mentionedInPaper = jsonObject.get("mentioned_in_paper").toString();
+            String mentionedInGithub = (String) jsonObject.get("mentioned_in_github").toString();
+            String framework = (String) jsonObject.get("framework");
             params.put("nameWithOwner", nameWithOwner);
             params.put("mentionedInPaper", mentionedInPaper);
             params.put("mentionedInGithub", mentionedInGithub);
@@ -92,27 +102,63 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return 1;
     }
 
+    /**
+     * Method
+     * Method - METHOD_INTRODUCED_IN_PAPER -> Paper
+     * Collection - COLLECTION_HAS_METHOD -> Method
+     * Area - AREA_HAS_COLLECTION -> Collection
+     *
+     * @param filePath
+     * @return
+     * @throws DAOException
+     */
     @Override
-    public int importMethodsJson(String filePath) {
+    public int importMethodsJson(String filePath) throws DAOException {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
         for (int i = 0; i < jsonArray.size(); i++) {
             JSONObject jsonObject = (JSONObject) jsonArray.get(i);
-            String paperswithcodeUrl = (String) jsonObject.get("url");
             String name = (String) jsonObject.get("name");
+            if (StrUtil.isBlankIfStr(name)) {
+                continue;
+            }
+            String paperswithcodeUrl = (String) jsonObject.get("url");
             String fullName = (String) jsonObject.get("full_name");
             String description = (String) jsonObject.get("description");
-            String paperTitle = (String) jsonObject.get("paper");
-            String introducedYear = (String) jsonObject.get("introduced_year");
+            String codeSnippetUrl = (String) jsonObject.get("code_snippet_url");
             Map<String, Object> params = new HashMap<>();
             params.put("paperswithcodeUrl", paperswithcodeUrl);
             params.put("name", name);
             params.put("fullName", fullName);
             params.put("description", description);
-            params.put("paperTitle", paperTitle);
-            params.put("introducedYear", introducedYear);
-            // todo Method - METHOD_INTRODUCED_IN_PAPER Paper
-            int res1 = papersWithCodeMapper.mergeMethodPaper(params);
+            params.put("codeSnippetUrl", codeSnippetUrl);
+            int resMethod = papersWithCodeMapper.mergeMethod(params);
+            String paperTitle = (String) jsonObject.get("paper");
+            // paperTitle不为空才执行
+            if (!StrUtil.isBlankIfStr(paperTitle)) {
+                String introducedYear = jsonObject.get("introduced_year").toString();
+                params.put("paperTitle", paperTitle);
+                params.put("introducedYear", introducedYear);
+                int resMethodPaper = papersWithCodeMapper.mergeMethodPaper(params);
+            }
             JSONArray collections = ((JSONArray) jsonObject.get("collections"));
+            for (int j = 0; j < collections.size(); j++) {
+                JSONObject collection = (JSONObject) collections.get(j);
+                String collectionName = (String) collection.get("collection");
+                // collectionName不为空才执行
+                if (!StrUtil.isBlankIfStr(collectionName)) {
+                    params.put("collectionName", collectionName);
+                    int resCollectionMethod = papersWithCodeMapper.mergeCollectionMethod(params);
+                    String areaId = (String) collection.get("area_id");
+                    // areaId不为空才执行
+                    if (!StrUtil.isBlankIfStr(areaId)) {
+                        String area = (String) collection.get("area");
+                        params.put("areaId", areaId);
+                        params.put("area", area);
+                        int resAreaColleciton = papersWithCodeMapper.mergeAreaCollection(params);
+                    }
+                }
+            }
+            System.out.println("importMethodsJson: " + i + "/" + jsonArray.size());
         }
         return 1;
     }
@@ -125,19 +171,19 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
      * @return
      * @throws Exception
      */
-    private int mergeTask(JSONArray jsonArray) throws Exception {
+    private int mergeTaskUnion(JSONArray jsonArray) throws Exception {
         // 第一层JSONArray
         for (int i = 0; i < jsonArray.size(); i++) {
             JSONObject jsonObject = (JSONObject) jsonArray.get(i);
             // Task 和 Category的关系
-            int resTaskCategory = mergeTaskCategory(jsonObject);
+            int resTaskCategory = mergeCategoryTask(jsonObject);
             if (resTaskCategory == 0) {
                 continue;
             }
             // Task & Dataset & Model & Paper & Metric & Repo的关系
-            int resDataset = mergeDataset(jsonObject);
+            int resDataset = mergeDatasetUnion(jsonObject);
             // Task 和 Subtasks的关系 subtask是task的递归嵌套
-            int resSubtask = mergeSubtask(jsonObject);
+            int resSubtask = mergeSubtaskUnion(jsonObject);
             System.out.println("mergeTask: " + i + "/" + jsonArray.size());
         }
         return 1;
@@ -145,7 +191,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
-     * <p>
+     * Task - TASK_HAS_MODEL -> Model
      * 'model_links' 都为[]
      *
      * @param jsonObject
@@ -153,23 +199,21 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
      * @return
      * @throws DAOException
      */
-    private int mergeModelPaperRepo(JSONObject jsonObject, JSONObject dataset) throws DAOException {
+    private int mergeModelPaperRepoUnion(JSONObject jsonObject, JSONObject dataset) throws DAOException {
         String taskName = (String) jsonObject.get("task");
         JSONArray rows = (JSONArray) ((JSONObject) dataset.get("sota")).get("rows");
         String datasetName = (String) dataset.get("dataset");
         for (int i = 0; i < rows.size(); i++) {
             JSONObject model = (JSONObject) rows.get(i);
             String modelName = (String) model.get("model_name");
+            // modelName为空则跳过
             if (StrUtil.isBlankIfStr(modelName)) {
                 continue;
             }
-            // Task & Model 的关系
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("modelName", modelName);
             int res1 = papersWithCodeMapper.mergeTaskModel(params);
-//            System.out.println("task: " + taskName + " - model: " + modelName);
-            // Model - MODEL_ON_DATASET -> Dataset
             JSONObject metrics = (JSONObject) model.get("metrics");
             Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
             params.put("datasetName", datasetName);
@@ -178,30 +222,30 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 String metricValue = metricEntry.getValue().toString();
                 params.put("metricName", metricName);
                 params.put("metricValue", metricValue);
+                // model&dataset都保证存在，顺便merge了model
                 int res2 = papersWithCodeMapper.createModelDataset(params);
             }
-//            System.out.println("model: " + modelName + " - dataset: " + datasetName);
-            // model - MODEL_INTRODUCED_IN_PAPER -> paper
-            String paperUrl = (String) model.get("paper_url");
-            if (!StrUtil.isBlankIfStr(paperUrl)) {
-                String paperTitle = (String) model.get("paper_title");
+            // 即将merge的paper和repo是平级的，不能随便卫语句跳出for循环，不然另一个就忽略了，通过单if语句控制逻辑
+            String paperTitle = (String) model.get("paper_title");
+            // paper不为空才执行这一段，否则继续执行repo段
+            if (!StrUtil.isBlankIfStr(paperTitle)) {
+                String paperUrl = (String) model.get("paper_url");
                 String paperDate = (String) model.get("paper_date");
                 params.put("paperTitle", paperTitle);
                 params.put("paperUrl", paperUrl);
                 params.put("paperDate", paperDate);
                 int res3 = papersWithCodeMapper.mergeModelPaper(params);
-//                System.out.println("model: " + modelName + " - paper: " + paperUrl);
             }
-            // Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
             JSONArray codeLinks = (JSONArray) model.get("code_links");
             for (int j = 0; j < codeLinks.size(); j++) {
                 JSONObject codeLink = (JSONObject) codeLinks.get(j);
                 String nameWithOwner = (String) codeLink.get("title");
-                params.put("nameWithOwner", nameWithOwner);
-                if (!StrUtil.isBlankIfStr(nameWithOwner)) {
-                    int res4 = papersWithCodeMapper.mergeModelRepo(params);
-//                    System.out.println("model: " + modelName + " - repo: " + nameWithOwner);
+                // repo为空则跳过
+                if (StrUtil.isBlankIfStr(nameWithOwner)) {
+                    continue;
                 }
+                params.put("nameWithOwner", nameWithOwner);
+                int res4 = papersWithCodeMapper.mergeModelRepo(params);
             }
         }
         return 1;
@@ -209,44 +253,48 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
+     * Task - TASK_HAS_DATASET -> Dataset
+     * uniom
      * 字段 'dataset_citations' 'dataset_links' 'subdatasets'都为[]
      *
      * @param jsonObject
      * @return
      */
-    private int mergeDataset(JSONObject jsonObject) throws DAOException {
+    private int mergeDatasetUnion(JSONObject jsonObject) throws DAOException {
+        // task 已经merge过了
         String taskName = (String) jsonObject.get("task");
         JSONArray datasets = (JSONArray) jsonObject.get("datasets");
         for (int i = 0; i < datasets.size(); i++) {
             JSONObject dataset = (JSONObject) datasets.get(i);
             String datasetName = (String) dataset.get("dataset");
+            // dataset为空则跳过
             if (StrUtil.isBlankIfStr(datasetName)) {
                 continue;
             }
             String description = (String) dataset.get("description");
-            // Task - TASK_HAS_DATASET -> Dataset
             Map<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("datasetName", datasetName);
             params.put("description", description);
             int res = papersWithCodeMapper.mergeTaskDataset(params);
-//            System.out.println("task: " + taskName + " - dataset:" + datasetName);
             // 嵌套关系，如果要分方法写的话，也嵌套调用
-            int resModel = mergeModelPaperRepo(jsonObject, dataset);
+            int resModel = mergeModelPaperRepoUnion(jsonObject, dataset);
         }
         return 1;
     }
 
 
     /**
-     * Task & Subtask的关系 递归嵌套
+     * Task - TASK_HAS_SUBTASK -> Subtask
+     * subtask是task的递归嵌套
+     * <p>
      * 字段'source_link'都为null
      *
      * @param jsonObject
      * @return
      * @throws DAOException
      */
-    private int mergeSubtask(JSONObject jsonObject) throws Exception {
+    private int mergeSubtaskUnion(JSONObject jsonObject) throws Exception {
         String taskName = (String) jsonObject.get("task");
         JSONArray subtasks = (JSONArray) jsonObject.get("subtasks");
         // 没有subtasks则递归结束
@@ -256,11 +304,11 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         for (int j = 0; j < subtasks.size(); j++) {
             JSONObject subtask = (JSONObject) subtasks.get(j);
             String subtaskName = ((String) subtask.get("task"));
+            // subtaskName为空则跳过
             if (StrUtil.isBlankIfStr(subtaskName)) {
                 continue;
             }
             String description = (String) jsonObject.get("description");
-            // Task - TASK_HAS_SUBTASK -> Subtask
             HashMap<String, Object> params = new HashMap<>();
             params.put("taskName", taskName);
             params.put("subtaskName", subtaskName);
@@ -268,37 +316,36 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             int res = papersWithCodeMapper.mergeTaskSubtask(params);
         }
         // 递归嵌套
-        mergeTask(subtasks);
+        mergeTaskUnion(subtasks);
         return 1;
     }
 
     /**
-     * Task & Category的关系
+     * Category - CATEGORY_HAS_TASK -> Task
      *
      * @param jsonObject
      * @return
      * @throws Exception
      */
-    private int mergeTaskCategory(JSONObject jsonObject) throws Exception {
+    private int mergeCategoryTask(JSONObject jsonObject) throws Exception {
         String taskName = (String) jsonObject.get("task");
+        String description = (String) jsonObject.get("description");
         if (StrUtil.isBlankIfStr(taskName)) {
             return 0;
         }
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("taskName", taskName);
+        params.put("description", description);
+        int resTask = papersWithCodeMapper.mergeTask(params);
         JSONArray categories = (JSONArray) jsonObject.get("categories");
-        String description = (String) jsonObject.get("description");
         // 对于subtask，categories字段是[]，Jackson解析为size为0的JSONArray
         for (int j = 0; j < categories.size(); j++) {
             String category = (String) categories.get(j);
             if (StrUtil.isBlankIfStr(category)) {
                 continue;
             }
-            // Task - TASK_UNDER_CATEGORY -> Category
-            HashMap<String, Object> params = new HashMap<>();
-            params.put("taskName", taskName);
             params.put("category", category);
-            params.put("description", description);
-            int res = papersWithCodeMapper.mergeTaskCategory(params);
-//            System.out.println("task: " + taskName + " - category:" + category);
+            int resCategoryTask = papersWithCodeMapper.mergeCategoryTask(params);
         }
         return 1;
     }
