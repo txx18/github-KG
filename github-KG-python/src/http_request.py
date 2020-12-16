@@ -3,6 +3,15 @@ import requests
 from util.FileUtils import *
 import jsonpath
 
+
+def importPapersWithAbstractJson(file_path):
+    url = "http://localhost:8080/paperswithcode/importPapersWithAbstractJson"
+    payload = {"filePath": file_path}
+    response = requests.post(url=url, data=payload).content.decode("utf-8")
+    if json.loads(response).get("status") != "success":
+        print(json.loads(response))
+        return
+
 def importMethodsJson(file_path):
     url = "http://localhost:8080/paperswithcode/importMethodsJson"
     payload = {"filePath": file_path}
@@ -19,6 +28,7 @@ def importLinksBetweenPapersAndCodeJson(file_path):
         print(json.loads(response))
         return
 
+
 def importEvaluationTablesJson(file_path):
     url = "http://localhost:8080/paperswithcode/importEvaluationTablesJson"
     payload = {"filePath": file_path}
@@ -27,11 +37,13 @@ def importEvaluationTablesJson(file_path):
         print(json.loads(response))
         return
 
+
 def updateTfIdf(ownerWithName):
     url = "http://localhost:8080/repo/updateTfIdf"
     payload = {"ownerWithName": ownerWithName}
     response = requests.post(url=url, data=payload).content.decode("utf-8")
     return response
+
 
 def createRepoByJsonFile_batch(dir_path):
     insert_repo_count = 0

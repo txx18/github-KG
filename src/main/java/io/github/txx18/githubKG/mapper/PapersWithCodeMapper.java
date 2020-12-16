@@ -26,11 +26,21 @@ public interface PapersWithCodeMapper {
 
     int mergeTask(Map<String, Object> params) throws DAOException;
 
-    int mergePaper(Map<String, Object> params) throws DAOException;
+    int mergePaperLBPACJson(Map<String, Object> params) throws DAOException;
 
-    int mergeMethod(Map<String, Object> params) throws DAOException;
+    int mergeMethodMethodsJson(Map<String, Object> params) throws DAOException;
 
     int mergeCollectionMethod(Map<String, Object> params) throws DAOException;
 
     int mergeAreaCollection(Map<String, Object> params) throws DAOException;
+
+    int mergePaperPWAJson(Map<String, Object> params) throws DAOException;
+
+    int mergePaperAuthor(Map<String, Object> params) throws DAOException;
+
+    int mergeTaskPaper(Map<String, Object> params) throws DAOException;
+
+    int mergeMethodPWAJson(Map<String, Object> params) throws DAOException;
+
+    int mergeMethodMainCollection(Map<String, Object> params) throws DAOException;
 }

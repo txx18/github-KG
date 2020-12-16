@@ -66,4 +66,19 @@ public class PapersWithCodeController {
         }
         return ResponseSimpleFactory.createSimpleResponse("ok");
     }
+
+    @RequestMapping(path = "/importPapersWithAbstractJson", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseSimpleFactory importPapersWithAbstractJson(@RequestParam String filePath) {
+        int res = 0;
+        try {
+            res = papersWithCodeService.importPapersWithAbstractJson(filePath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseSimpleFactory.createResponse(e.getMessage());
+        }
+        if (res != 1) {
+            return ResponseSimpleFactory.createSimpleResponse("no");
+        }
+        return ResponseSimpleFactory.createSimpleResponse("ok");
+    }
 }

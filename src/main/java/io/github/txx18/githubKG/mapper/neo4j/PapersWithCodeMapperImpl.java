@@ -260,17 +260,14 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (method)-[intro:METHOD_INTRODUCED_IN_PAPER]->(paper)\n" +
                 "  ON CREATE SET intro.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET intro.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET intro.introducedYear = $introducedYear";
+                "SET intro.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
         String name = (String) params.get("name");
         String paperTitle = (String) params.get("paperTitle");
-        String introducedYear = (String) params.get("introducedYear");
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
                         "name", name,
-                        "paperTitle", paperTitle,
-                        "introducedYear", introducedYear
+                        "paperTitle", paperTitle
                 ));
                 return 1;
             });
@@ -305,7 +302,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergePaper(Map<String, Object> params) throws DAOException {
+    public int mergePaperLBPACJson(Map<String, Object> params) throws DAOException {
         String query = "// Paper\n" +
                 "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -339,7 +336,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergeMethod(Map<String, Object> params) throws DAOException {
+    public int mergeMethodMethodsJson(Map<String, Object> params) throws DAOException {
         String query = "// Method\n" +
                 "MERGE (method:Method {name: $name})\n" +
                 "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -347,12 +344,14 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 "SET method.paperswithcodeUrl = $paperswithcodeUrl\n" +
                 "SET method.fullName = $fullName\n" +
                 "SET method.description = $description\n" +
-                "SET method.codeSnippetUrl = $codeSnippetUrl";
+                "SET method.codeSnippetUrl = $codeSnippetUrl\n" +
+                "SET method.introducedYear = $introducedYear";
         String paperswithcodeUrl = (String) params.get("paperswithcodeUrl");
         String name = (String) params.get("name");
         String fullName = (String) params.get("fullName");
         String description = (String) params.get("description");
         String codeSnippetUrl = (String) params.get("codeSnippetUrl");
+        String introducedYear = (String) params.get("introducedYear");
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
@@ -360,7 +359,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                         "name", name,
                         "fullName", fullName,
                         "description", description,
-                        "codeSnippetUrl", codeSnippetUrl
+                        "codeSnippetUrl", codeSnippetUrl,
+                        "introducedYear", introducedYear
                 ));
                 return 1;
             });
@@ -404,27 +404,192 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     public int mergeAreaCollection(Map<String, Object> params) throws DAOException {
         String query = "// Area - AREA_HAS_COLLECTION -> Collection\n" +
                 "MATCH (coll:Collection {name: $collectionName})\n" +
-                "MERGE (area:Area {areaId: $areaId})\n" +
+                "MERGE (area:Area {area: $areaName})\n" +
                 "  ON CREATE SET area.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET area.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET area.area = $area\n" +
+                "SET area.areaId = $areaId\n" +
                 "MERGE (area)-[has:AREA_HAS_COLLECTION]->(coll)\n" +
                 "  ON CREATE SET has.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET has.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
         String collectionName = (String) params.get("collectionName");
         String areaId = (String) params.get("areaId");
-        String area = (String) params.get("area");
+        String areaName = (String) params.get("areaName");
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
                         "collectionName", collectionName,
                         "areaId", areaId,
-                        "area", area
+                        "areaName", areaName
                 ));
                 return 1;
             });
         } catch (Exception e) {
-            String log = "mergeAreaCollection failed! area: " + areaId + " - collection: " + collectionName;
+            String log = "mergeAreaCollection failed! area: " + areaName + " - collection: " + collectionName;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergePaperPWAJson(Map<String, Object> params) throws DAOException {
+        String query = "// Paper （PWAJson）\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.paperswithcodeUrl = $paperswithcodeUrl\n" +
+                "SET paper.arxivId = $arxivId\n" +
+                "SET paper.abstract = $abstract\n" +
+                "SET paper.urlAbs = $urlAbs\n" +
+                "SET paper.urlPdf = $urlPdf\n" +
+                "SET paper.proceeding = $proceeding\n" +
+                "SET paper.date = $date";
+        String paperswithcodeUrl = (String) params.get("paperswithcodeUrl");
+        String arxivId = (String) params.get("arxivId");
+        String paperTitle = (String) params.get("paperTitle");
+        String paperAbstract = (String) params.get("abstract");
+        String urlAbs = (String) params.get("urlAbs");
+        String urlPdf = (String) params.get("urlPdf");
+        String proceeding = (String) params.get("proceeding");
+        String date = (String) params.get("date");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "paperswithcodeUrl", paperswithcodeUrl,
+                        "arxivId", arxivId,
+                        "paperTitle", paperTitle,
+                        "abstract", paperAbstract,
+                        "urlAbs", urlAbs,
+                        "urlPdf", urlPdf,
+                        "proceeding", proceeding,
+                        "date", date
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergePaperPWAJson failed! paper: " + paperTitle;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergePaperAuthor(Map<String, Object> params) throws DAOException {
+        String query = "// Paper - PAPER_WRITTEN_BY_AUTHOR -> Author\n" +
+                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
+                "MERGE (author:Author {name: $authorName})\n" +
+                "  ON CREATE SET author.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET author.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (paper)-[written:PAPER_WRITTEN_BY_AUTHOR]->(author)\n" +
+                "  ON CREATE SET written.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET written.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        String paperTitle = (String) params.get("paperTitle");
+        String authorName = (String) params.get("authorName");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "paperTitle", paperTitle,
+                        "authorName", authorName
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergePaperAuthor failed! paper: " + paperTitle + " - author: " + authorName;
+            logger.error(log, e);
+            throw new DAOException(log)
+                    ;
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeTaskPaper(Map<String, Object> params) throws DAOException {
+        String query = "// Task - TASK_HAS_PAPER -> Paper\n" +
+                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (task)-[has:TASK_HAS_PAPER]->(paper)\n" +
+                "  ON CREATE SET has.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET has.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        String paperTitle = (String) params.get("paperTitle");
+        String taskName = (String) params.get("taskName");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "paperTitle", paperTitle,
+                        "taskName", taskName
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeTaskPaper failed! task: " + taskName + " - paper: " + paperTitle;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeMethodPWAJson(Map<String, Object> params) throws DAOException {
+        String query = "// Method （PWAJson）\n" +
+                "MERGE (method:Method {name: $name})\n" +
+                "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.fullName = $fullName\n" +
+                "SET method.description = $description\n" +
+                "SET method.codeSnippetUrl = $codeSnippetUrl\n" +
+                "SET method.introducedYear = $introducedYear";
+        String name = (String) params.get("name");
+        String fullName = (String) params.get("fullName");
+        String description = (String) params.get("description");
+        String codeSnippetUrl = (String) params.get("codeSnippetUrl");
+        String introducedYear = (String) params.get("introducedYear");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "name", name,
+                        "fullName", fullName,
+                        "description", description,
+                        "codeSnippetUrl", codeSnippetUrl,
+                        "introducedYear", introducedYear
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeMethodPWAJson failed! method: " + name;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeMethodMainCollection(Map<String, Object> params) throws DAOException {
+        String query = "// Method - Method_MAIN_UNDER_COLLECTION -> Collection\n" +
+                "MATCH (method:Method {name: $name})\n" +
+                "MERGE (coll:Collection {name: $collectionName})\n" +
+                "  ON CREATE SET coll.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET coll.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET coll.description = $collectionDescription\n" +
+                "MERGE (method)-[main:Method_MAIN_UNDER_COLLECTION]->(coll)\n" +
+                "  ON CREATE SET main.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET main.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        String name = (String) params.get("name");
+        String collectionName = (String) params.get("collectionName");
+        String collectionDescription = (String) params.get("collectionDescription");
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "name", name,
+                        "collectionName", collectionName,
+                        "collectionDescription", collectionDescription
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeMethodMainCollection failed! method: " + name + " - collection: " + collectionName;
             logger.error(log, e);
             throw new DAOException(log);
         }

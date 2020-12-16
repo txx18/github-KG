@@ -65,12 +65,12 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
         for (int i = 0; i < jsonArray.size(); i++) {
             JSONObject jsonObject = (JSONObject) jsonArray.get(i);
-            String paperswithcodeUrl = (String) jsonObject.get("paper_url");
             String paperTitle = (String) jsonObject.get("paper_title");
             // paperTitle为空则跳过，否则先merge paper
             if (StrUtil.isBlankIfStr(paperTitle)) {
                 continue;
             }
+            String paperswithcodeUrl = (String) jsonObject.get("paper_url");
             String paperArxivId = (String) jsonObject.get("paper_arxiv_id");
             String paperUrlAbs = (String) jsonObject.get("paper_url_abs");
             String paperUrlPdf = (String) jsonObject.get("paper_url_pdf");
@@ -80,7 +80,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("paperArxivId", paperArxivId);
             params.put("paperUrlAbs", paperUrlAbs);
             params.put("paperUrlPdf", paperUrlPdf);
-            int resPaper = papersWithCodeMapper.mergePaper(params);
+            int resPaper = papersWithCodeMapper.mergePaperLBPACJson(params);
             System.out.println("mergePaper: " + i + "/" + jsonArray.size());
             String repoUrl = (String) jsonObject.get("repo_url");
             // repoUrl为空则跳过
@@ -125,19 +125,19 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             String fullName = (String) jsonObject.get("full_name");
             String description = (String) jsonObject.get("description");
             String codeSnippetUrl = (String) jsonObject.get("code_snippet_url");
+            String introducedYear = jsonObject.get("introduced_year").toString();
             Map<String, Object> params = new HashMap<>();
             params.put("paperswithcodeUrl", paperswithcodeUrl);
             params.put("name", name);
             params.put("fullName", fullName);
             params.put("description", description);
             params.put("codeSnippetUrl", codeSnippetUrl);
-            int resMethod = papersWithCodeMapper.mergeMethod(params);
+            params.put("introducedYear", introducedYear);
+            int resMethod = papersWithCodeMapper.mergeMethodMethodsJson(params);
             String paperTitle = (String) jsonObject.get("paper");
             // paperTitle不为空才执行
             if (!StrUtil.isBlankIfStr(paperTitle)) {
-                String introducedYear = jsonObject.get("introduced_year").toString();
                 params.put("paperTitle", paperTitle);
-                params.put("introducedYear", introducedYear);
                 int resMethodPaper = papersWithCodeMapper.mergeMethodPaper(params);
             }
             JSONArray collections = ((JSONArray) jsonObject.get("collections"));
@@ -148,17 +148,113 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 if (!StrUtil.isBlankIfStr(collectionName)) {
                     params.put("collectionName", collectionName);
                     int resCollectionMethod = papersWithCodeMapper.mergeCollectionMethod(params);
-                    String areaId = (String) collection.get("area_id");
-                    // areaId不为空才执行
-                    if (!StrUtil.isBlankIfStr(areaId)) {
-                        String area = (String) collection.get("area");
+                    String areaName = (String) collection.get("area");
+                    // area不为空才执行
+                    if (!StrUtil.isBlankIfStr(areaName)) {
+                        String areaId = (String) collection.get("area_id");
                         params.put("areaId", areaId);
-                        params.put("area", area);
+                        params.put("areaName", areaName);
                         int resAreaColleciton = papersWithCodeMapper.mergeAreaCollection(params);
                     }
                 }
             }
             System.out.println("importMethodsJson: " + i + "/" + jsonArray.size());
+        }
+        return 1;
+    }
+
+    /**
+     * Paper （PWAJson）
+     * Paper - PAPER_WRITTEN_BY_AUTHOR -> Author
+     * Task - TASK_HAS_PAPER -> Paper
+     * Paper - Paper_USES_METHOD -> Method
+     * Method - Method_MAIN_UNDER_COLLECTION -> Collection
+     * Area - AREA_HAS_COLLECTION -> Collection
+     *
+     * @param filePath
+     * @return
+     */
+    @Override
+    public int importPapersWithAbstractJson(String filePath) throws DAOException {
+        JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
+        for (int i = 0; i < jsonArray.size(); i++) {
+            JSONObject jsonObject = (JSONObject) jsonArray.get(i);
+            String paperTitle = (String) jsonObject.get("title");
+            // paperTitle为空则跳过
+            if (StrUtil.isBlankIfStr(paperTitle)) {
+                continue;
+            }
+            String paperswithcodeUrl = (String) jsonObject.get("paper_url");
+            String arxivId = (String) jsonObject.get("arxiv_id");
+            String paperAbstract = (String) jsonObject.get("abstract");
+            String urlAbs = (String) jsonObject.get("url_abs");
+            String urlPdf = (String) jsonObject.get("url_pdf");
+            String proceeding = (String) jsonObject.get("proceeding");
+            String date = (String) jsonObject.get("date");
+            HashMap<String, Object> params = new HashMap<>();
+            params.put("paperswithcodeUrl", paperswithcodeUrl);
+            params.put("arxivId", arxivId);
+            params.put("paperTitle", paperTitle);
+            params.put("abstract", paperAbstract);
+            params.put("urlAbs", urlAbs);
+            params.put("urlPdf", urlPdf);
+            params.put("proceeding", proceeding);
+            params.put("date", date);
+            int resPaper = papersWithCodeMapper.mergePaperPWAJson(params);
+            JSONArray authors = (JSONArray) jsonObject.get("authors");
+            for (int j = 0; j < authors.size(); j++) {
+                String authorName = (String) authors.get(j);
+                // authorName 为空则跳过
+                if (StrUtil.isBlankIfStr(authorName)) {
+                    continue;
+                }
+                params.put("authorName", authorName);
+                int resPaperAuthor = papersWithCodeMapper.mergePaperAuthor(params);
+            }
+            JSONArray tasks = (JSONArray) jsonObject.get("tasks");
+            for (int j = 0; j < tasks.size(); j++) {
+                String taskName = (String) tasks.get(j);
+                // taskName 为空则跳过
+                if (StrUtil.isBlankIfStr(taskName)) {
+                    continue;
+                }
+                params.put("taskName", taskName);
+                int resTaskPaper = papersWithCodeMapper.mergeTaskPaper(params);
+            }
+            JSONArray methods = (JSONArray) jsonObject.get("methods");
+            for (int j = 0; j < methods.size(); j++) {
+                JSONObject method = (JSONObject) methods.get(j);
+                String name = (String) jsonObject.get("name");
+                if (StrUtil.isBlankIfStr(name)) {
+                    continue;
+                }
+                String fullName = (String) jsonObject.get("full_name");
+                String description = (String) jsonObject.get("description");
+                String codeSnippetUrl = (String) jsonObject.get("code_snippet_url");
+                String introducedYear = jsonObject.get("introduced_year").toString();
+                params.put("name", name);
+                params.put("fullName", fullName);
+                params.put("description", description);
+                params.put("codeSnippetUrl", codeSnippetUrl);
+                params.put("introducedYear", introducedYear);
+                int resMethod = papersWithCodeMapper.mergeMethodPWAJson(params);
+                JSONObject collection = (JSONObject) method.get("main_collection");
+                String collectionName = (String) collection.get("name");
+                // collectionName不为空才执行
+                if (!StrUtil.isBlankIfStr(collectionName)) {
+                    String collectionDescription = (String) collection.get("description");
+                    params.put("collectionName", collectionName);
+                    params.put("collectionDescription", collectionDescription);
+                    int resMethodMainCollection = papersWithCodeMapper.mergeMethodMainCollection(params);
+                    String areaName = (String) collection.get("area");
+                    // area不为空才执行
+                    if (!StrUtil.isBlankIfStr(areaName)) {
+                        params.put("areaName", areaName);
+                        int resAreaColleciton = papersWithCodeMapper.mergeAreaCollection(params);
+                    }
+                }
+            }
+            System.out.println("importPapersWithAbstractJson: " + i + "/" + jsonArray.size());
         }
         return 1;
     }
