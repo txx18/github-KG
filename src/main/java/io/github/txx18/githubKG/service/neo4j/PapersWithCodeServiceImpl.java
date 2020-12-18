@@ -36,13 +36,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
      * 这次采取另一种解析思路，在程序里分步解析，因为Cypher太难用了，比如判空逻辑
      * 但是，一个Cypher搞定的好处是，开销小效率高，因为每次 开session transaction是很慢的
      * <p>
-     * 判空逻辑：
-     * 目标：不管是Null还是size=0，在KG里面都是“不处理（不merge）”，这样查询结果就是“查不到”，用户清楚查不到不代表“没有”
-     * 1、实体的主键是 不能为null也不能为“空串” 的，不然没有必要创建它了；而一个()-[]-()中有部分为null需要做一些处理，不能说有一个为null全都不要了
-     * 写完mergeTaskCategory和mergeTaskDataset之后，我发现Jackson反序列化时会自动忽略值为null的字段，不像json.load()（看完整版就去看python的），
-     * 那其实没必要判null了，但是判空串 还是有必要的
-     * 2、对于size=0的集合，自然不会遍历，也就自动“不处理”了
-     * <p>
      * 调用树：平级则并列，嵌套则嵌套调用
      *
      * @param filePath
@@ -89,8 +82,8 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             }
             String[] tokens = StrUtil.split(repoUrl, "/");
             String nameWithOwner = tokens[3] + "/" + tokens[4];
-            String mentionedInPaper = jsonObject.get("mentioned_in_paper").toString();
-            String mentionedInGithub = (String) jsonObject.get("mentioned_in_github").toString();
+            boolean mentionedInPaper = (boolean) jsonObject.get("mentioned_in_paper");
+            boolean mentionedInGithub = (boolean) jsonObject.get("mentioned_in_github");
             String framework = (String) jsonObject.get("framework");
             params.put("nameWithOwner", nameWithOwner);
             params.put("mentionedInPaper", mentionedInPaper);

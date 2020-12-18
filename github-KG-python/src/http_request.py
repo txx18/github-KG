@@ -50,7 +50,7 @@ def createRepoByJsonFile_batch(dir_path):
     for i, repo_file in enumerate(os.listdir(dir_path)):
         if os.path.splitext(repo_file)[1] != ".json":
             continue
-        # if i < 13810:
+        # if i <= 336:
         #     continue
         json_dic = read_json_file(os.path.join(dir_path, repo_file))
         nameWithOwner = jsonpath.jsonpath(json_dic, "$.data.repository.nameWithOwner")[0]

@@ -1,5 +1,6 @@
 package io.github.txx18.githubKG.mapper.neo4j;
 
+import cn.hutool.json.JSONObject;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.RepoMapper;
 import org.neo4j.driver.*;
@@ -8,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
+
+import static org.neo4j.driver.Values.parameters;
 
 @Component
 public class RepoMapperImpl implements RepoMapper {
@@ -18,106 +22,6 @@ public class RepoMapperImpl implements RepoMapper {
 
     public RepoMapperImpl(Driver driver) {
         this.driver = driver;
-    }
-
-    @Override
-    public int insertRepoByJsonFile(String filePath) throws DAOException {
-        String query = "// 创建、增量更新\n" +
-                "WITH\n" +
-                "  'file:///" + filePath + "' AS url\n" +
-                "CALL apoc.load.json(url, '$.data.repository') YIELD value\n" +
-                "//return size(value.languages.nodes), value.languages.nodes[10].name, value.languages.edges[10].size\n" +
-                "// repo的标量属性\n" +
-                "MERGE (repo:Repo {nameWithOwner: value.nameWithOwner})\n" +
-                "// 仅第一次创建时保存创建时间\n" +
-                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "// （这个SET不属于上一个MERGE）已存在repo，比如更新数据时，则需要重新设置其属性\n" +
-                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "repo.createdAt = value.createdAt,\n" +
-                "repo.description = value.description,\n" +
-                "repo.forkCount = value.forkCount,\n" +
-                "repo.homepageUrl = value.homepageUrl,\n" +
-                "repo.isDisabled = value.isDisabled,\n" +
-                "repo.isEmpty = value.isEmpty,\n" +
-                "repo.isFork = value.isFork,\n" +
-                "repo.isInOrganization = value.isInOrganization,\n" +
-                "repo.isLocked = value.isLocked,\n" +
-                "repo.isMirror = value.isMirror,\n" +
-                "repo.isPrivate = value.isPrivate,\n" +
-                "repo.isTemplate = value.isTemplate,\n" +
-                "repo.issueCount = value.issues.totalCount,\n" +
-                "repo.isUserConfigurationRepository = value.isUserConfigurationRepository,\n" +
-                "repo.licenseInfoName = value.licenseInfo.name,\n" +
-                "repo.name = value.name,\n" +
-                "repo.primaryLanguageName = value.primaryLanguage.name,\n" +
-                "repo.pullRequestCount = value.pullRequests.totalCount,\n" +
-                "repo.pushedAt = value.pushedAt,\n" +
-                "repo.stargazerCount = value.stargazerCount,\n" +
-                "repo.updatedAt = value.updatedAt,\n" +
-                "repo.url = value.url\n" +
-                "// 与owner的关系\n" +
-                "MERGE (owner:Owner {login: value.owner.login})\n" +
-                "  ON CREATE SET owner.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "  owner.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (repo)-[belong:BELONGS_TO]->(owner)\n" +
-                "  ON CREATE SET belong.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET belong.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "// 与topic的关系\n" +
-                "// value.repositoryTopics.nodes是1row的[{}]，unwind之后的nodes是多rows的{}\n" +
-                "FOREACH (node IN value.repositoryTopics.nodes |\n" +
-                "  MERGE (topic:Topic {name: node.topic.name})\n" +
-                "    ON CREATE SET topic.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "    topic.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  MERGE (repo)-[under:UNDER]->(topic)\n" +
-                "    ON CREATE SET under.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  SET under.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                ")\n" +
-                "// repo与package的关系 repo与repo的关系 关系\n" +
-                "FOREACH (manifest_node IN value.dependencyGraphManifests.nodes |\n" +
-                "  FOREACH (dependency_node IN manifest_node.dependencies.nodes |\n" +
-                "  // repo与package的DEPENDS_ON关系\n" +
-                "    MERGE(package:Package {packageName: dependency_node.packageManager + '/' + dependency_node.packageName})\n" +
-                "      ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "      package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    MERGE (repo)-[depends_package:DEPENDS_ON_PACKAGE]->(package)\n" +
-                "      ON CREATE SET depends_package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    SET depends_package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "    depends_package.requirements = dependency_node.requirements\n" +
-                "  // todo case 想实现的是如果依赖的repo为空，则不添加这个dst_repo节点\n" +
-                "  // repo与repo的DEPENDS_ON关系，dst_repo作为repo的附属品不作为主要的repo更新手段，由于可能存在自己依赖自己的情况，所以属性基本是ON CREATE SET\n" +
-                "    MERGE\n" +
-                "      (dst_repo:Repo {nameWithOwner: CASE WHEN exists(dependency_node.repository.nameWithOwner) THEN dependency_node.repository.nameWithOwner\n" +
-                "                                       ELSE 'unknown-$-unknown'\n" +
-                "                                       END})\n" +
-                "      ON CREATE SET dst_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "      dst_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    MERGE (repo)-[depends_repo:DEPENDS_ON_REPO]->(dst_repo)\n" +
-                "      ON CREATE SET depends_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  // repo与package的DEVELOPS关系\n" +
-                "    MERGE (dst_repo)-[develops:DEVELOPS]->(package)\n" +
-                "      ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "    SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  )\n" +
-                ")\n" +
-                "// 与language的关系（同时遍历两个list好像插件不识别）\n" +
-                "FOREACH (i IN range(0, size(value.languages.nodes) - 1) |\n" +
-                "MERGE (lang:Language {name:value.languages.nodes[i].name})\n" +
-                "ON CREATE SET lang.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT'),\n" +
-                "lang.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (repo)- [uses:USES {size:value.languages.edges[i].size}]- >(lang)\n" +
-                "ON CREATE SET uses.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET uses.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                ")\n" +
-                "return 1";
-        try (Session session = driver.session()) {
-            Result result = session.writeTransaction(tx -> tx.run(query));
-            return 1;
-        } catch (Exception e) {
-            String log = "createRepoByJsonFile failed";
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
     }
 
     @Override
@@ -163,5 +67,235 @@ public class RepoMapperImpl implements RepoMapper {
             logger.error(log, e);
             throw new DAOException(log);
         }
+    }
+
+    @Override
+    public int mergeRepo(Map<String, Object> params) throws DAOException {
+        String query;
+        query = "// Repository\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.createdAt = $createdAt\n" +
+                "SET repo.description = $description\n" +
+                "SET repo.forkCount = $forkCount\n" +
+                "SET repo.homepageUrl = $homepageUrl\n" +
+                "SET repo.isDisabled = $isDisabled\n" +
+                "SET repo.isEmpty = $isEmpty\n" +
+                "SET repo.isFork = $isFork\n" +
+                "SET repo.isInOrganization = $isInOrganization\n" +
+                "SET repo.isLocked = $isLocked\n" +
+                "SET repo.isMirror = $isMirror\n" +
+                "SET repo.isPrivate = $isPrivate\n" +
+                "SET repo.isTemplate = $isTemplate\n" +
+                "SET repo.issueCount = $issueCount\n" +
+                "SET repo.isUserConfigurationRepository = $isUserConfigurationRepository\n" +
+                "SET repo.licenseInfoName = $licenseInfoName\n" +
+                "SET repo.name = $name\n" +
+                "SET repo.primaryLanguageName = $primaryLanguageName\n" +
+                "SET repo.pullRequestCount = $pullRequestCount\n" +
+                "SET repo.pushedAt = $pushedAt\n" +
+                "SET repo.stargazerCount = $stargazerCount\n" +
+                "SET repo.updatedAt = $updatedAt\n" +
+                "SET repo.url = $url";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", params.get("nameWithOwner"),
+                        "createdAt", params.get("createdAt"),
+                        "description", params.get("description"),
+                        "forkCount", params.get("forkCount"),
+                        "homepageUrl", params.get("homepageUrl"),
+                        "isDisabled", params.get("isDisabled"),
+                        "isEmpty", params.get("isEmpty"),
+                        "isFork", params.get("isFork"),
+                        "isInOrganization", params.get("isInOrganization"),
+                        "isLocked", params.get("isLocked"),
+                        "isMirror", params.get("isMirror"),
+                        "isPrivate", params.get("isPrivate"),
+                        "isTemplate", params.get("isTemplate"),
+                        "issueCount", params.get("issueCount"),
+                        "isUserConfigurationRepository", params.get("isUserConfigurationRepository"),
+                        "licenseInfoName", params.get("licenseInfoName"),
+                        "name", params.get("name"),
+                        "nameWithOwner", params.get("nameWithOwner"),
+                        "primaryLanguageName", params.get("primaryLanguageName"),
+                        "pullRequestCount", params.get("pullRequestCount"),
+                        "pushedAt", params.get("pushedAt"),
+                        "stargazerCount", params.get("stargazerCount"),
+                        "updatedAt", params.get("updatedAt"),
+                        "url", params.get("url")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepo failed! repo: " + params.get("nameWithOwner");
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoOwner(JSONObject repository) throws DAOException {
+        String query = "// Repository - REPO_BELONGS_TO_OWNER -> Owner\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE (owner:Owner {login: $login})\n" +
+                "  ON CREATE SET owner.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET owner.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (repo)-[belong:REPO_BELONGS_TO_OWNER]->(owner)\n" +
+                "  ON CREATE SET belong.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET belong.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", repository.get("nameWithOwner"),
+                        "login", ((JSONObject) repository.get("owner")).get("login")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepo failed! repo: " + repository.get("nameWithOwner");
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoTopic(JSONObject repository, JSONObject topicNode) throws DAOException {
+        String query = "// Repository - REPO_UNDER_TOPIC -> Topic\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE (topic:Topic {name: $topicName})\n" +
+                "  ON CREATE SET topic.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET topic.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (repo)-[under:REPO_UNDER_TOPIC]->(topic)\n" +
+                "  ON CREATE SET under.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET under.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", repository.get("nameWithOwner"),
+                        "topicName", ((JSONObject) topicNode.get("topic")).get("name")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoTopic failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoLanguage(JSONObject repository, JSONObject languageNode, JSONObject languageEdge) throws DAOException {
+        String query = "// Repository - REPO_USES_LANGUAGE -> Language\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE (lang:Language {name: $languageName})\n" +
+                "  ON CREATE SET lang.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET lang.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (repo)-[uses:REPO_USES_LANGUAGE {size: $size}]->(lang)\n" +
+                "  ON CREATE SET uses.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET uses.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", repository.get("nameWithOwner"),
+                        "languageName", languageNode.get("name"),
+                        "size", languageEdge.getOrDefault("size", "")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoLanguage failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoDependsOnPackage(JSONObject repository, JSONObject dependencyGraphManifestNode, JSONObject dependencyNode) throws DAOException {
+        String query = "// Repository - REPO_DEPENDS_ON_PACKAGE -> Package\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE(package:Package {nameWithManager: $packageNameWithManager})\n" +
+                "  ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET package.name = $packageName\n" +
+                "SET package.manager = $packageManager\n" +
+                "MERGE (repo)-[depends_package:REPO_DEPENDS_ON_PACKAGE]->(package)\n" +
+                "  ON CREATE SET depends_package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_package.blobPath = $blobPath\n" +
+                "SET depends_package.requirements = $requirements";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", repository.get("nameWithOwner"),
+                        "packageNameWithManager", dependencyNode.get("packageManager") + "/" + dependencyNode.get("packageName"),
+                        "packageName", dependencyNode.get("packageName"),
+                        "packageManager", dependencyNode.get("packageManager"),
+                        "blobPath", dependencyGraphManifestNode.getOrDefault("blobPath", ""),
+                        "requirements", dependencyNode.getOrDefault("requirements", "")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoPackage failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoDependsOnRepo(JSONObject repository, JSONObject dependencyNode) throws DAOException {
+        String query = "// Repository - REPO_DEPENDS_ON_REPO -> Repository\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE(dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})\n" +
+                "  ON CREATE SET dst_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET dst_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (repo)-[depends_repo:REPO_DEPENDS_ON_REPO]->(dst_repo)\n" +
+                "  ON CREATE SET depends_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", repository.get("nameWithOwner"),
+                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoRepo failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergeRepoDevelopsPackage(JSONObject dependencyNode) throws DAOException {
+        String query = "// Repository - REPO_DEVELOPS_PACKAGE -> Package\n" +
+                "MATCH (dst_repo:Repository {nameWithOwner: $desRepoNameWithOwner})\n" +
+                "MATCH (package:Package {nameWithManager: $packageNameWithManager})\n" +
+                "MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)\n" +
+                "  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "desRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
+                        "packageNameWithManager", dependencyNode.get("packageManager") + "/" + dependencyNode.get("packageName")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoRepo failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
     }
 }

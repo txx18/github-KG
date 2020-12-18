@@ -193,7 +193,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     public int mergeModelRepo(Map<String, Object> params) throws DAOException {
         String query = "// Model - MODEL_IMPLEMENTED_BY_REPO -> Repo\n" +
                 "MATCH (model:Model {name: $modelName})\n" +
-                "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
                 "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (model)-[implements:MODEL_IMPLEMENTED_BY_REPO]->(repo)\n" +
@@ -218,7 +218,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     public int mergePaperRepo(Map<String, Object> params) throws DAOException {
         String query = "// Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
                 "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
-                "MERGE (repo:Repo {nameWithOwner: $nameWithOwner})\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
                 "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (paper)-[link:PAPER_IMPLEMENTED_BY_REPO]->(repo)\n" +
@@ -229,8 +229,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
                 "SET link.framework = $framework";
         String paperTitle = (String) params.get("paperTitle");
         String nameWithOwner = (String) params.get("nameWithOwner");
-        String mentionedInPaper = (String) params.get("mentionedInPaper");
-        String mentionedInGithub = (String) params.get("mentionedInGithub");
+        boolean mentionedInPaper = (boolean) params.get("mentionedInPaper");
+        boolean mentionedInGithub = (boolean) params.get("mentionedInGithub");
         String framework = (String) params.get("framework");
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
