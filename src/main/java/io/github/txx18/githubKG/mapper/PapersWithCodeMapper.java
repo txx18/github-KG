@@ -3,6 +3,7 @@ package io.github.txx18.githubKG.mapper;
 import io.github.txx18.githubKG.exception.DAOException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public interface PapersWithCodeMapper {
@@ -12,7 +13,7 @@ public interface PapersWithCodeMapper {
 
     int mergeTaskDataset(Map<String, Object> params) throws DAOException;
 
-    int createModelDataset(HashMap<String, Object> params) throws DAOException;
+    int createModelMetricDataset(HashMap<String, Object> params) throws DAOException;
 
     int mergeModelPaper(HashMap<String, Object> params) throws DAOException;
 
@@ -22,7 +23,7 @@ public interface PapersWithCodeMapper {
 
     int mergePaperRepo(Map<String, Object> params) throws DAOException;
 
-    int mergeMethodPaper(Map<String, Object> params) throws DAOException;
+    int mergeMethodPaperNotExist(Map<String, Object> params) throws DAOException;
 
     int mergeTask(Map<String, Object> params) throws DAOException;
 
@@ -43,4 +44,10 @@ public interface PapersWithCodeMapper {
     int mergeMethodPWAJson(Map<String, Object> params) throws DAOException;
 
     int mergeMethodMainCollection(Map<String, Object> params) throws DAOException;
+
+    List<String> matchPaperStartWith(String firstToken) throws DAOException;
+
+    int mergeMethodPaperExist(Map<String, Object> params) throws DAOException;
+
+    int mergePaperUsesMethod(Map<String, Object> params) throws DAOException;
 }
