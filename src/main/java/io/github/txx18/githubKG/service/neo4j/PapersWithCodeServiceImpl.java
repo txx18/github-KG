@@ -171,6 +171,10 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         outer:
         for (String title : titles) {
             String[] titleTokens = title.split("\\W+");
+            // titleTokens是全名，不能比dash的缩写版短
+            if (titleTokens.length < dashTitleTokens.length) {
+                continue outer;
+            }
             for (int i = 1; i < dashTitleTokens.length; i++) {
                 // 如果有一个token不同，则比较下一个title
                 if (!StrUtil.equalsIgnoreCase(dashTitleTokens[i], titleTokens[i])) {
@@ -186,7 +190,8 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("existPaperTitle", existPaperTitle);
             int resMethodPaperExist = papersWithCodeMapper.mergeMethodPaperExist(params);
         } else {
-            int resMethodPaper = papersWithCodeMapper.mergeMethodPaperNotExist(params);
+            // todo 暂时通过dashTitle获得完整paperTitle还没有比较好的方式，而dashTitle作为paperTitle又不好，所以先不merge了
+//            int resMethodPaper = papersWithCodeMapper.mergeMethodPaperNotExist(params);
         }
         return 1;
     }

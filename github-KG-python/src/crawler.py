@@ -2,12 +2,103 @@ import hashlib
 import logging
 import random
 import time
+from lxml import etree
+from bs4 import BeautifulSoup
 
 import requests
 
 from src import queries
+from src.data import get_arxivId_paperTitle_dic
 from src.statistic import *
 from util.FileUtils import *
+
+
+class GoogleScholar(object):
+    def __init__(self):
+        # self.api = "https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q={}"
+        # self.api = "https://xueshu.baidu.com/s?wd={}&tn=SE_baiduxueshu_c1gjeupa&cl=3&ie=utf-8&bs=arcface-additive-angular-margin-loss-for-deep&f=8&rsv_bp=1&rsv_sug2=0&sc_f_para=sc_tasktype%3D%7BfirstSimpleSearch%7D&rsv_spt=3&rsv_n=2"
+        self.api = "https://xueshu.baidu.com/s?wd={}&tn=SE_baiduxueshu_c1gjeupa&ie=utf-8&sc_hit=1"
+        self.retry_times = 0
+        # self.header = get_header('scholar.google.com')
+        self.header = get_header('xueshu.baidu.com')
+
+    # FIXME 搜索引擎往往区分了红字蓝字，很难分离
+    def get_paper_title_batch(self, json_file_path, out_dir_path):
+        json = read_json_file(json_file_path)
+        dic = get_arxivId_paperTitle_dic()
+        dash_titles = jsonpath.jsonpath(json, "$..paper")
+        for i, dash_title in enumerate(dash_titles):
+            # if i < 157:
+            #     continue
+            if dash_title is None or dash_title == "":
+                continue
+            if dash_title.isdigit():
+                str_list = list(dash_title)
+                str_list.insert(4, ".")
+                arxivId = "".join(str_list)
+                title = dic.get(arxivId, "unknown")
+                write_file_line_append(out_dir_path, out_dir_path + "/paper_titles.csv", dash_title + ", " + title)
+                continue
+            try:
+                time.sleep(random.randint(2, 5))
+                # search_title = dash_title.replace("-", " ")
+                title = self.get_paper_title(dash_title, out_dir_path)
+            except Exception as e:
+                print(e)
+                print("other exception")
+                break
+            print("get_paper_title finished: index: " + str(i) + ", title: " + dash_title)
+
+    def get_paper_title(self, search_title, out_dir_path):
+        url = self.api.format(search_title)
+        response = requests.get(url=url, headers=self.header)
+        content = response.text
+        # content = str(response.text)
+        html = etree.HTML(content)
+        # gs_rt = html.xpath("//*[@class='gs_rt']/a[1]")
+        try:
+            search_tokens = html.xpath("//*[@id='1']/div[1]/h3/a")[0].text
+            other_tokens = html.xpath("//*[@id='1']/div[1]/h3/a/text()")
+            merge_tokens = []
+            for i in range(len(other_tokens)):
+                if other_tokens[i] == " ":
+                    merge_tokens.append(search_tokens[i])
+                else:
+                    merge_tokens.append(other_tokens[i])
+            title = " ".join(merge_tokens)
+            if title is None or title == "":
+                title = "unknown"
+            # title = html.xpath("//*[@id='dtl_l']/div[1]/h3/a/text()")
+        except Exception as e:
+            print(e)
+            title = "unknown"
+        # soup = BeautifulSoup(content, "lxml")
+        # title = soup.html.body.div[2].div[10].div[2].div[2].div[2].div[1].div[2].h3.a[1]
+        # try:
+        #     title = soup.select("h3[class='gs_rt']")[0].text
+        # except Exception as e:
+        #     title = "unknown"
+
+        print("response.status_code: " + str(response.status_code))
+        if response.status_code != 200:
+            logger.info("request error at: " + str(search_title))
+        # 写入文件
+        write_file_line_append(out_dir_path, out_dir_path + "/paper_titles.csv", search_title + ", " + title)
+        return title
+
+
+def get_header(host):
+    header = {
+        'Host': host,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-encoding': 'gzip, deflate',
+        'Accept-language': 'zh-CN,zh;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'max-age=0',
+        'Upgrade-Insecure-Requests': '1'
+    }
+    return header
 
 
 def read_token():

@@ -11,7 +11,7 @@ def write_file_line_append(file_dir_path, file_path, data):
     if not os.path.exists(file_dir_path):
         os.makedirs(file_dir_path)
     with open(file_path, 'a', encoding='utf-8') as f:
-        f.write(data + "\n")
+        f.write("\n" + data)
 
 
 def read_file(file_path):
