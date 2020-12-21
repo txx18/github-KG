@@ -2,6 +2,8 @@
 /config/token_list.txt
 *.zip
 /test
+/result
+/cypher
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template

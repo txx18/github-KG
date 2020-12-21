@@ -2,6 +2,7 @@ rebel.xml
 .mvn
 cypher
 /backup
+/result
 
 HELP.md
 target/

@@ -4,6 +4,14 @@ from util.FileUtils import *
 import jsonpath
 
 
+def transCoOccurrenceNetworkNoRequirements():
+    url = "http://localhost:8080/github/transCoOccurrenceNetworkNoRequirements"
+    response = requests.post(url=url).content.decode("utf-8")
+    if json.loads(response).get("status") != "success":
+        print(json.loads(response))
+        return
+
+
 def importPapersWithAbstractJson(file_path):
     url = "http://localhost:8080/paperswithcode/importPapersWithAbstractJson"
     payload = {"filePath": file_path}
@@ -12,6 +20,7 @@ def importPapersWithAbstractJson(file_path):
         print(json.loads(response))
         return
 
+
 def importMethodsJson(file_path):
     url = "http://localhost:8080/paperswithcode/importMethodsJson"
     payload = {"filePath": file_path}
@@ -19,6 +28,7 @@ def importMethodsJson(file_path):
     if json.loads(response).get("status") != "success":
         print(json.loads(response))
         return
+
 
 def importLinksBetweenPapersAndCodeJson(file_path):
     url = "http://localhost:8080/paperswithcode/importLinksBetweenPapersAndCodeJson"
