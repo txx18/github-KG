@@ -45,6 +45,13 @@ public class RepoMapperImpl implements RepoMapper {
         }
     }
 
+    /**
+     * FIXME 这查询当时看的哪儿？？就用Java Driver的吧。。
+     *
+     * @param ownerWithName
+     * @return
+     * @throws DAOException
+     */
     @Override
     public List<String> listUnderPaths(String ownerWithName) throws DAOException {
         String query = "MATCH (repo:Repo {nameWithOwner: 'tensorflow/tensorflow'})-[under:UNDER]->(topic:Topic)\n" +
@@ -58,7 +65,6 @@ public class RepoMapperImpl implements RepoMapper {
             if (record == null) {
                 return null;
             }
-            // FIXME
             List<Object> under_list = record.get("under_list").asList();
             List<Object> topic_list = record.get("topic_list").asList();*/
             return underList;
