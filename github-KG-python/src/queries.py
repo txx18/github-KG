@@ -11,9 +11,17 @@ query{
 """
 
 repos_query = """
-query {
+{
   repository(owner: "%s", name: "%s") {
+    assignableUsers {
+      totalCount
+    }
+    commitComments {
+      totalCount
+    }
     createdAt
+    databaseId
+    deleteBranchOnMerge
     dependencyGraphManifests(first: 100) {
       totalCount
       pageInfo {
@@ -37,16 +45,26 @@ query {
             }
             requirements
           }
-        } 
+        }
         dependenciesCount
         exceedsMaxSize
         filename
-        parseable  
+        parseable
       }
     }
+    deleteBranchOnMerge
     description
+    diskUsage
     forkCount
+    forks {
+      totalCount
+    }
+    hasIssuesEnabled
+    hasProjectsEnabled
+    hasWikiEnabled
     homepageUrl
+    isArchived
+    isBlankIssuesEnabled
     isDisabled
     isEmpty
     isFork
@@ -54,13 +72,18 @@ query {
     isLocked
     isMirror
     isPrivate
+    isSecurityPolicyEnabled
     isTemplate
     issues(first: 1) {
       totalCount
     }
     isUserConfigurationRepository
-    languages (first: 100) {
+    labels {
       totalCount
+    }
+    languages(first: 100) {
+      totalCount
+      totalSize
       pageInfo {
         endCursor
         hasNextPage
@@ -75,18 +98,42 @@ query {
     licenseInfo {
       name
     }
+    mentionableUsers {
+      totalCount
+    }
+    mergeCommitAllowed
+    milestones {
+      totalCount
+    }
+    mirrorUrl
     name
     nameWithOwner
+    openGraphImageUrl
     owner {
       login
+    }
+    packages {
+      totalCount
+    }
+    parent {
+      nameWithOwner
     }
     primaryLanguage {
       name
     }
-    pullRequests(first: 1) {
+    projects {
+      totalCount
+    }
+    projectsResourcePath
+    projectsUrl
+    pullRequests {
       totalCount
     }
     pushedAt
+    rebaseMergeAllowed
+    releases {
+      totalCount
+    }
     repositoryTopics(first: 10) {
       totalCount
       pageInfo {
@@ -96,16 +143,34 @@ query {
       nodes {
         topic {
           name
-          relatedTopics {
+          relatedTopics(first: 3) {
             name
           }
-          stargazerCount
         }
       }
     }
+    resourcePath
+    securityPolicyUrl
+    squashMergeAllowed
+    sshUrl
     stargazerCount
+    stargazers {
+      totalCount
+    }
+    submodules {
+      totalCount
+    }
+    templateRepository {
+      nameWithOwner
+    }
     updatedAt
     url
+    vulnerabilityAlerts {
+      totalCount
+    }
+    watchers {
+      totalCount
+    }
   }
 }
 """

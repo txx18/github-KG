@@ -116,6 +116,7 @@ public class RepoServiceImpl implements RepoService {
                 }
             }
         }
+        System.out.println("insert repo: " + nameWithOwner);
         return 1;
     }
 
@@ -129,19 +130,28 @@ public class RepoServiceImpl implements RepoService {
         Map<String, Object> params = new HashMap<>();
         params.put("createdAt", repository.getOrDefault("createdAt", ""));
         params.put("description", repository.getOrDefault("description", ""));
-        params.put("forkCount", repository.getOrDefault("forkCount", ""));
+        params.put("forkCount", repository.getOrDefault("forkCount", -1));
         params.put("homepageUrl", repository.getOrDefault("homepageUrl", ""));
-        params.put("isDisabled", repository.getOrDefault("isDisabled", ""));
-        params.put("isEmpty", repository.getOrDefault("isEmpty", ""));
-        params.put("isFork", repository.getOrDefault("isFork", ""));
-        params.put("isInOrganization", repository.getOrDefault("isInOrganization", ""));
-        params.put("isLocked", repository.getOrDefault("isLocked", ""));
-        params.put("isMirror", repository.getOrDefault("isMirror", ""));
-        params.put("isPrivate", repository.getOrDefault("isPrivate", ""));
-        params.put("isTemplate", repository.getOrDefault("isTemplate", ""));
+        Object isDisabled = repository.getOrDefault("isDisabled", "");
+        params.put("isDisabled", isDisabled == "" ? -1 : ((boolean)(isDisabled) ? 1 : 0));
+        Object isEmpty = repository.getOrDefault("isEmpty", "");
+        params.put("isEmpty", isEmpty == "" ? -1 : ((boolean)(isEmpty) ? 1 : 0));
+        Object isFork = repository.getOrDefault("isFork", "");
+        params.put("isFork", isFork == "" ? -1 : ((boolean)(isFork) ? 1 : 0));
+        Object isInOrganization = repository.getOrDefault("isInOrganization", "");
+        params.put("isInOrganization", isInOrganization == "" ? -1 : ((boolean)(isInOrganization) ? 1 : 0));
+        Object locked = repository.getOrDefault("isLocked", "");
+        params.put("isLocked", locked == "" ? -1: ((boolean)(locked) ? 1 : 0));
+        Object isMirror = repository.getOrDefault("isMirror", "");
+        params.put("isMirror", isMirror == "" ? -1 : ((boolean)(isMirror) ? 1 : 0));
+        Object aPrivate = repository.getOrDefault("isPrivate", "");
+        params.put("isPrivate", aPrivate == "" ? -1 : ((boolean)(aPrivate) ? 1 : 0));
+        Object isTemplate = repository.getOrDefault("isTemplate", "");
+        params.put("isTemplate", isTemplate == "" ? -1 : ((boolean)(isTemplate) ? 1 : 0));
         params.put("issueCount", ((JSONObject) repository.getOrDefault("issues", JSONUtil.createObj())).getOrDefault(
-                "totalCount", ""));
-        params.put("isUserConfigurationRepository", repository.getOrDefault("isUserConfigurationRepository", ""));
+                "totalCount", -1));
+        Object isUserConfigurationRepository = repository.getOrDefault("isUserConfigurationRepository", "");
+        params.put("isUserConfigurationRepository", isUserConfigurationRepository == "" ? -1 : ((boolean)(isUserConfigurationRepository) ? 1 : 0));
         params.put("licenseInfoName",
                 ((JSONObject) repository.getOrDefault("licenseInfo", JSONUtil.createObj())).getOrDefault("name", ""));
         params.put("name", repository.getOrDefault("name", ""));
@@ -150,9 +160,9 @@ public class RepoServiceImpl implements RepoService {
                 ((JSONObject) repository.getOrDefault("primaryLanguage", JSONUtil.createObj())).getOrDefault(
                 "name", ""));
         params.put("pullRequestCount",
-                ((JSONObject) repository.getOrDefault("pullRequests", JSONUtil.createObj())).getOrDefault("totalCount", ""));
+                ((JSONObject) repository.getOrDefault("pullRequests", JSONUtil.createObj())).getOrDefault("totalCount", -1));
         params.put("pushedAt", repository.getOrDefault("pushedAt", ""));
-        params.put("stargazerCount", repository.getOrDefault("stargazerCount", ""));
+        params.put("stargazerCount", repository.getOrDefault("stargazerCount", -1));
         params.put("updatedAt", repository.getOrDefault("updatedAt", ""));
         params.put("url", repository.getOrDefault("url", ""));
         // 去除Map中值为null的键值对

@@ -7,13 +7,15 @@ import jsonpath
 from util.FileUtils import read_json_file
 
 
-def get_arxivId_paperTitle_dic():
-    json = read_json_file(
-        r"C:\Disk_Dev\Repository\github-KG\github-KG-python\tx_data\resource\paperswithcode\papers-with-abstracts.json")
-    res = {}
-    for item in json:
-        res[item["arxiv_id"]] = item["title"]
-    return res
+class Paperswithcode(object):
+    def get_arxivId_paperTitle_dic(self):
+        json = read_json_file(
+            r"C:\Disk_Dev\Repository\github-KG\github-KG-python\tx_data\resource\paperswithcode\papers-with-abstracts.json")
+        res = {}
+        for item in json:
+            res[item["arxiv_id"]] = item["title"]
+        return res
+
 
 
 def repo_property():

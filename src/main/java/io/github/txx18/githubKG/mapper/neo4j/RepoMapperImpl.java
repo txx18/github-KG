@@ -209,7 +209,7 @@ public class RepoMapperImpl implements RepoMapper {
                 tx.run(query, parameters(
                         "nameWithOwner", repository.get("nameWithOwner"),
                         "languageName", languageNode.get("name"),
-                        "size", languageEdge.getOrDefault("size", "")
+                        "size", languageEdge.getOrDefault("size", -1)
                 ));
                 return 1;
             });

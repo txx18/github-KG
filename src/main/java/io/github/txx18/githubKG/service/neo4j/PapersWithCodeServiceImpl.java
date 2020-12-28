@@ -85,8 +85,10 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             String nameWithOwner = tokens[3] + "/" + tokens[4];
             String framework = (String) jsonObject.getOrDefault("framework", "");
             params.put("nameWithOwner", nameWithOwner);
-            params.put("mentionedInPaper", jsonObject.getOrDefault("mentioned_in_paper", ""));
-            params.put("mentionedInGithub", jsonObject.getOrDefault("mentioned_in_github", ""));
+            Object mentionedInPaper = jsonObject.getOrDefault("mentioned_in_paper", "");
+            params.put("mentionedInPaper", mentionedInPaper == "" ? -1 : ((boolean)(mentionedInPaper) ? 1 : 0));
+            Object mentionedInGithub = jsonObject.getOrDefault("mentioned_in_github", "");
+            params.put("mentionedInGithub", mentionedInGithub == "" ? -1 : ((boolean)(mentionedInGithub) ? 1 : 0));
             params.put("framework", framework);
             int res = papersWithCodeMapper.mergePaperRepo(params);
             System.out.println("importLinksBetweenPapersAndCodeJson: " + i + "/" + jsonArray.size());

@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import requests
 
 from src import queries
-from src.data import get_arxivId_paperTitle_dic
+from src.data import Paperswithcode
 from src.statistic import *
 from util.FileUtils import *
 
@@ -21,11 +21,12 @@ class GoogleScholar(object):
         self.retry_times = 0
         # self.header = get_header('scholar.google.com')
         self.header = get_header('xueshu.baidu.com')
+        self.paperswithcode = Paperswithcode()
 
     # FIXME 搜索引擎往往区分了红字蓝字，很难分离
     def get_paper_title_batch(self, json_file_path, out_dir_path):
         json = read_json_file(json_file_path)
-        dic = get_arxivId_paperTitle_dic()
+        dic = self.paperswithcode.get_arxivId_paperTitle_dic()
         dash_titles = jsonpath.jsonpath(json, "$..paper")
         for i, dash_title in enumerate(dash_titles):
             # if i < 157:
@@ -213,19 +214,30 @@ class GithubAPIv4(object):
                 response = requests.post(url=self.api, headers=headers, json={"query": query})
                 response_json = response.json()
                 # 处理errors，分情况处理
-                errors_status = self.handle_errors(response_json)
-                if errors_status is None:
+                errors = response_json.get('errors')
+                if errors is None:
                     pass
-                elif errors_status == 'RATE_LIMITED':
-                    raise Exception(errors_status + ": " + str(headers))
-                elif errors_status == 'NOT_FOUND':
-                    log = errors_status + ": " + str(repo_full_name)
-                    print("\033[31m" + log + "\033[0m")
-                    logger.info(log)
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
-                    break
                 else:
-                    raise Exception(errors_status)
+                    # 已经发现的error类型，RATE_LIMITED, NOT_FOUND, FORBIDDEN
+                    # errors还可能是别的数据结构比如 loading... error_type 为 None
+                    error_type = errors[0].get('type')
+                    error_message = errors[0].get('message')
+                    if error_type == 'RATE_LIMITED':
+                        log = 'error_type: ' + error_type + ", error_message: " + error_message + "headers: " + str(
+                            headers)
+                        print("\033[31m" + log + "\033[0m")
+                        raise Exception(log)
+                    elif error_type == 'NOT_FOUND':
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
+                        log = 'error_type: ' + error_type + ", error_message: " + error_message + str(repo_full_name)
+                        print("\033[31m" + log + "\033[0m, exclude it in ./exclude/exclude_repo.txt")
+                        logger.info(log)
+                        break
+                    else:
+                        log = str(errors)
+                        print("\033[31m" + log + "\033[0m")
+                        logger.info(log)
+                        raise Exception(log)
                 # 如果过滤仓库时出现异常，分情况处理
                 try:
                     exclude = self.filter_repo(response_json)
@@ -267,21 +279,8 @@ class GithubAPIv4(object):
                     break
                 else:
                     print("exception at: " + owner + "/" + repoName + ", message: \033[31m" + str(
-                        e) + "\033[0m" + ", retrying...")
+                        e) + "\033[0m" + ", \033[33m retrying...\033[0m")
                     continue
-
-    def handle_errors(self, response_json):
-        # 检测 RATE_LIMIT
-        errors = response_json.get('errors')
-        if errors is None:
-            return None
-        for error in errors:
-            if error.get('type') == 'RATE_LIMITED':
-                return 'RATE_LIMITED'
-            elif error.get('type') == 'NOT_FOUND':
-                return 'NOT_FOUND'
-            else:
-                return "other error type"
 
     def filter_repo(self, response_json):
         """
