@@ -29,7 +29,7 @@ public class GithubMapperImpl implements GithubMapper {
     public int transCoOccurrenceNetworkNoRequirements() {
         try (Session session = driver.session()) {
             int repoCount = 0;
-            List<Record> repoNameWithOwners = session.readTransaction(new TransactionWork<List<Record>>() {
+            List<Record> repoNameWithOwners = session.readTransaction(new TransactionWork<List<Record>>() { // 匿名内部类写法
                 @Override
                 public List<Record> execute(Transaction tx) {
                     return matchHasDependenciesRepos(tx);
@@ -50,12 +50,8 @@ public class GithubMapperImpl implements GithubMapper {
                     Record nameWithManager1 = nameWithManagers.get(i);
                     for (int j = i + 1; j < nameWithManagers.size(); j++) {
                         Record nameWithManager2 = nameWithManagers.get(j);
-                        packageCount += session.writeTransaction(new TransactionWork<Integer>() {
-                            @Override
-                            public Integer execute(Transaction tx) {
-                                return mergePackageCoOccurrencePackage(tx, nameWithManager1, nameWithManager2);
-                            }
-                        });
+                        packageCount += session.writeTransaction(tx -> mergePackageCoOccurrencePackage(tx,
+                                nameWithManager1, nameWithManager2)); // lambda写法
                     }
                     System.out.println("package1: " + nameWithManager1 + "index: " + packageCount);
                 }

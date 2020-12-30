@@ -4,7 +4,6 @@ import cn.hutool.json.JSONObject;
 import io.github.txx18.githubKG.exception.DAOException;
 
 import java.util.List;
-import java.util.Map;
 
 public interface RepoMapper {
 
@@ -12,7 +11,7 @@ public interface RepoMapper {
 
     List<String> listUnderPaths(String ownerWithName) throws DAOException;
 
-    int mergeRepo(Map<String, Object> params) throws DAOException;
+    int mergeRepo(JSONObject repository) throws DAOException;
 
     int mergeRepoOwner(JSONObject repository) throws DAOException;
 

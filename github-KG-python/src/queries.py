@@ -52,7 +52,6 @@ repos_query = """
         parseable
       }
     }
-    deleteBranchOnMerge
     description
     diskUsage
     forkCount

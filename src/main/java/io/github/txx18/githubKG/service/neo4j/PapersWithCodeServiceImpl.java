@@ -164,10 +164,10 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         if (dashTitleTokens.length <= 1) {
             return 0;
         }
-        // 召回paperTitle START WITH titleTokens[0]的papers
+        // 【召回思想】先召回paperTitle START WITH titleTokens[0]的papers
         List<String> titles = papersWithCodeMapper.matchPaperStartWith(dashTitleTokens[0]);
         // 查询是否存在paper
-        // 存在判定标准：titleTokens里的token与查询到的papers分词的tokens是否顺次相等；二者都去掉空格标点，其中一个是另一个的开头忽略大小写
+        // 存在判定标准：titleTokens里的tokens与查询到的dashTitleTokens分词的tokens是否顺次相等；二者都去掉空格标点，其中一个是另一个的开头忽略大小写
         boolean isPaperExist = false;
         String existPaperTitle = "";
         outer:
@@ -188,6 +188,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 break outer;
             }
         }
+        // 暂且先只连接到“存在”的 paper 上，对于不存在的，本来应该merge上去（待完成）
         if (isPaperExist) {
             params.put("existPaperTitle", existPaperTitle);
             int resMethodPaperExist = papersWithCodeMapper.mergeMethodPaperExist(params);
