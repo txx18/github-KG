@@ -174,6 +174,7 @@ class GithubAPIv4(object):
     def __init__(self):
         self.api = "https://api.github.com/graphql"
         self.retry_times = 0
+        self.fail_times = 0
 
     def get_relate_topics(self, topic, out_dir_path):
         while True:
@@ -219,7 +220,7 @@ class GithubAPIv4(object):
                     pass
                 else:
                     # 已经发现的error类型，RATE_LIMITED, NOT_FOUND, FORBIDDEN
-                    # errors还可能是别的数据结构比如 loading... error_type 为 None
+                    # errors还可能是别的数据结构比如 loading, timedout 。此时error_type 为 None
                     error_type = errors[0].get('type')
                     error_message = errors[0].get('message')
                     if error_type == 'RATE_LIMITED':
@@ -235,8 +236,6 @@ class GithubAPIv4(object):
                         break
                     else:
                         log = str(errors)
-                        print("\033[31m" + log + "\033[0m")
-                        logger.info(log)
                         raise Exception(log)
                 # 如果过滤仓库时出现异常，分情况处理
                 try:
@@ -269,16 +268,27 @@ class GithubAPIv4(object):
                 write_json_file(out_dir_path, os.path.join(out_dir_path, owner + "-$-" + repoName + ".json"),
                                 response_json)
                 print("write to file: " + str(os.path.join(out_dir_path, owner + "-$-" + repoName + ".json")))
+                # 全部完成 break
+                self.fail_times = 0
                 break
             # 捕获需要重试的异常
             except Exception as e:
+                # 连续10次重试10次，认为连续失败，比如断网了，停止程序
+                if self.fail_times >= 10:
+                    print("\033[33m failed over 10 repos... stop! \033[0m")
+                    return
                 self.retry_times += 1
+                # 重试超过10次，记录并跳过（break完成跳过）
                 if self.retry_times >= 10:
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
                     self.retry_times = 0
+                    self.fail_times += 1
                     break
+                # 否则重试（continue完成重试）
                 else:
-                    print("exception at: " + owner + "/" + repoName + ", message: \033[31m" + str(
+                    time.sleep(5)
+                    logger.info(e)
+                    print("exception at: \033[31m" + owner + "/" + repoName + "\033[0m, message: \033[31m" + str(
                         e) + "\033[0m" + ", \033[33m retrying...\033[0m")
                     continue
 
@@ -315,7 +325,7 @@ class GithubAPIv4(object):
 v4 = GithubAPIv4()
 
 
-def get_repos_paperswithcode(json_file_path, out_dir_path):
+def get_repos_batch(json_file_path, out_dir_path):
     json_dic = read_json_file(json_file_path)
     repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
     ownerWithName_list = []
@@ -332,6 +342,7 @@ def get_repos_paperswithcode(json_file_path, out_dir_path):
     except FileNotFoundError as e:
         exclude_repo_list = []
     try:
+        # 重试次数过多的，先不爬取，有时候因为断网导致被记录的，可以清空之后就能对这些重新爬取
         retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
     except FileNotFoundError as e:
         retry_over_repo_list = []

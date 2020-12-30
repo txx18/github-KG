@@ -1,6 +1,5 @@
 package io.github.txx18.githubKG.service.neo4j;
 
-import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
@@ -12,9 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class RepoServiceImpl implements RepoService {
@@ -91,6 +88,11 @@ public class RepoServiceImpl implements RepoService {
         // 已经表达了if (!dependencyGraphManifestNodes.isEmpty())的意思，有dependencyGraphManifests依赖才执行
         for (int i = 0; i < dependencyGraphManifestNodes.size(); i++) {
             JSONObject dependencyGraphManifestNode = (JSONObject) dependencyGraphManifestNodes.get(i);
+            // 化boolean为整型
+            Object exceedsMaxSize = dependencyGraphManifestNode.getOrDefault("exceedsMaxSize", "");
+            dependencyGraphManifestNode.set("exceedsMaxSize", exceedsMaxSize == "" ? -1 : ((boolean)(exceedsMaxSize) ? 1 : 0));
+            Object parseable = dependencyGraphManifestNode.getOrDefault("parseable", "");
+            dependencyGraphManifestNode.set("parseable", exceedsMaxSize == "" ? -1 : ((boolean)(parseable) ? 1 : 0));
             JSONArray dependencyNodes =
                     (JSONArray) ((JSONObject) dependencyGraphManifestNode.getOrDefault("dependencies",
                             JSONUtil.createObj())).getOrDefault(
@@ -102,8 +104,7 @@ public class RepoServiceImpl implements RepoService {
                 String packageManager = (String) dependencyNode.getOrDefault("packageManager", "");
                 // packageName不为空才执行。这里是真正实体粒度的检查
                 if (!StrUtil.isBlankIfStr(packageName) && !StrUtil.isBlankIfStr(packageManager)) {
-                    int resRepoPackage = repoMapper.mergeRepoDependsOnPackage(repository, dependencyGraphManifestNode,
-                            dependencyNode);
+                    int resRepoPackage = repoMapper.mergeRepoDependsOnPackage(repository, dependencyGraphManifestNode, dependencyNode);
                 }
                 // desRepo不为null（Hutool为JSONNull对象）才执行
                 String dstRepoNameWithOwner =
@@ -120,6 +121,7 @@ public class RepoServiceImpl implements RepoService {
         return 1;
     }
 
+
     /**
      *
      * @param repository
@@ -127,47 +129,46 @@ public class RepoServiceImpl implements RepoService {
      * @throws DAOException
      */
     private int mergeRepo(JSONObject repository) throws DAOException {
-        Map<String, Object> params = new HashMap<>();
-        params.put("createdAt", repository.getOrDefault("createdAt", ""));
-        params.put("description", repository.getOrDefault("description", ""));
-        params.put("forkCount", repository.getOrDefault("forkCount", -1));
-        params.put("homepageUrl", repository.getOrDefault("homepageUrl", ""));
+        // 替换字段中的boolean值，默认值为-1，真为1，假为0
+        Object deleteBranchOnMerge = repository.getOrDefault("deleteBranchOnMerge", "");
+        repository.set("deleteBranchOnMerge", deleteBranchOnMerge == "" ? -1 : ((boolean)(deleteBranchOnMerge) ? 1 : 0));
+        Object hasIssuesEnabled = repository.getOrDefault("hasIssuesEnabled", "");
+        repository.set("hasIssuesEnabled", hasIssuesEnabled == "" ? -1 : ((boolean)(hasIssuesEnabled) ? 1 : 0));
+        Object hasProjectsEnabled = repository.getOrDefault("hasProjectsEnabled", "");
+        repository.set("hasProjectsEnabled", hasProjectsEnabled == "" ? -1 : ((boolean)(hasProjectsEnabled) ? 1 : 0));
+        Object hasWikiEnabled = repository.getOrDefault("hasWikiEnabled", "");
+        repository.set("hasWikiEnabled", hasWikiEnabled == "" ? -1 : ((boolean)(hasWikiEnabled) ? 1 : 0));
+        Object isArchived = repository.getOrDefault("isArchived", "");
+        repository.set("isArchived", isArchived == "" ? -1 : ((boolean)(isArchived) ? 1 : 0));
+        Object isBlankIssuesEnabled = repository.getOrDefault("isBlankIssuesEnabled", "");
+        repository.set("isBlankIssuesEnabled", isBlankIssuesEnabled == "" ? -1 : ((boolean)(isBlankIssuesEnabled) ? 1 : 0));
         Object isDisabled = repository.getOrDefault("isDisabled", "");
-        params.put("isDisabled", isDisabled == "" ? -1 : ((boolean)(isDisabled) ? 1 : 0));
+        repository.set("isDisabled", isDisabled == "" ? -1 : ((boolean)(isDisabled) ? 1 : 0));
         Object isEmpty = repository.getOrDefault("isEmpty", "");
-        params.put("isEmpty", isEmpty == "" ? -1 : ((boolean)(isEmpty) ? 1 : 0));
+        repository.set("isEmpty", isEmpty == "" ? -1 : ((boolean)(isEmpty) ? 1 : 0));
         Object isFork = repository.getOrDefault("isFork", "");
-        params.put("isFork", isFork == "" ? -1 : ((boolean)(isFork) ? 1 : 0));
+        repository.set("isFork", isFork == "" ? -1 : ((boolean)(isFork) ? 1 : 0));
         Object isInOrganization = repository.getOrDefault("isInOrganization", "");
-        params.put("isInOrganization", isInOrganization == "" ? -1 : ((boolean)(isInOrganization) ? 1 : 0));
-        Object locked = repository.getOrDefault("isLocked", "");
-        params.put("isLocked", locked == "" ? -1: ((boolean)(locked) ? 1 : 0));
+        repository.set("isInOrganization", isInOrganization == "" ? -1 : ((boolean)(isInOrganization) ? 1 : 0));
+        Object isLocked = repository.getOrDefault("isLocked", "");
+        repository.set("isLocked", isLocked == "" ? -1: ((boolean)(isLocked) ? 1 : 0));
         Object isMirror = repository.getOrDefault("isMirror", "");
-        params.put("isMirror", isMirror == "" ? -1 : ((boolean)(isMirror) ? 1 : 0));
-        Object aPrivate = repository.getOrDefault("isPrivate", "");
-        params.put("isPrivate", aPrivate == "" ? -1 : ((boolean)(aPrivate) ? 1 : 0));
+        repository.set("isMirror", isMirror == "" ? -1 : ((boolean)(isMirror) ? 1 : 0));
+        Object isPrivate = repository.getOrDefault("isPrivate", "");
+        repository.set("isPrivate", isPrivate == "" ? -1 : ((boolean)(isPrivate) ? 1 : 0));
+        Object isSecurityPolicyEnabled = repository.getOrDefault("isSecurityPolicyEnabled", "");
+        repository.set("isSecurityPolicyEnabled", isSecurityPolicyEnabled == "" ? -1 : ((boolean)(isSecurityPolicyEnabled) ? 1 : 0));
         Object isTemplate = repository.getOrDefault("isTemplate", "");
-        params.put("isTemplate", isTemplate == "" ? -1 : ((boolean)(isTemplate) ? 1 : 0));
-        params.put("issueCount", ((JSONObject) repository.getOrDefault("issues", JSONUtil.createObj())).getOrDefault(
-                "totalCount", -1));
+        repository.set("isTemplate", isTemplate == "" ? -1 : ((boolean)(isTemplate) ? 1 : 0));
         Object isUserConfigurationRepository = repository.getOrDefault("isUserConfigurationRepository", "");
-        params.put("isUserConfigurationRepository", isUserConfigurationRepository == "" ? -1 : ((boolean)(isUserConfigurationRepository) ? 1 : 0));
-        params.put("licenseInfoName",
-                ((JSONObject) repository.getOrDefault("licenseInfo", JSONUtil.createObj())).getOrDefault("name", ""));
-        params.put("name", repository.getOrDefault("name", ""));
-        params.put("nameWithOwner", repository.getOrDefault("nameWithOwner", ""));
-        params.put("primaryLanguageName",
-                ((JSONObject) repository.getOrDefault("primaryLanguage", JSONUtil.createObj())).getOrDefault(
-                "name", ""));
-        params.put("pullRequestCount",
-                ((JSONObject) repository.getOrDefault("pullRequests", JSONUtil.createObj())).getOrDefault("totalCount", -1));
-        params.put("pushedAt", repository.getOrDefault("pushedAt", ""));
-        params.put("stargazerCount", repository.getOrDefault("stargazerCount", -1));
-        params.put("updatedAt", repository.getOrDefault("updatedAt", ""));
-        params.put("url", repository.getOrDefault("url", ""));
-        // 去除Map中值为null的键值对
-        MapUtil.removeNullValue(params);
-        int resRepo = repoMapper.mergeRepo(params);
+        repository.set("isUserConfigurationRepository", isUserConfigurationRepository == "" ? -1 : ((boolean)(isUserConfigurationRepository) ? 1 : 0));
+        Object mergeCommitAllowed = repository.getOrDefault("mergeCommitAllowed", "");
+        repository.set("mergeCommitAllowed", mergeCommitAllowed == "" ? -1 : ((boolean)(mergeCommitAllowed) ? 1 : 0));
+        Object rebaseMergeAllowed = repository.getOrDefault("rebaseMergeAllowed", "");
+        repository.set("rebaseMergeAllowed", rebaseMergeAllowed == "" ? -1 : ((boolean)(rebaseMergeAllowed) ? 1 : 0));
+        Object squashMergeAllowed = repository.getOrDefault("squashMergeAllowed", "");
+        repository.set("squashMergeAllowed", squashMergeAllowed == "" ? -1 : ((boolean)(squashMergeAllowed) ? 1 : 0));
+        int resRepo = repoMapper.mergeRepo(repository);
         return 1;
     }
 

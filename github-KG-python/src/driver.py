@@ -25,7 +25,7 @@ class CategoryApp(object):
             "paperCount": paperCount_list,
             "modelCount": modelCount_list,
             "repositoryCount": repoCount_list
-                }
+        }
         # 写入文件
         df = pd.DataFrame(data=data)
         df.to_csv(r'C:\Disk_Dev\Repository\github-KG\github-KG-python\result\category_and_count.csv', index=False)
@@ -148,4 +148,3 @@ class App:
 
         result = tx.run(query, person_name=person_name)
         return [row["name"] for row in result]
-
