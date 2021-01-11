@@ -24,4 +24,6 @@ public interface RepoMapper {
     int mergeRepoDependsOnRepo(JSONObject repository, JSONObject dependencyNode) throws DAOException;
 
     int mergeRepoDevelopsPackage(JSONObject dependencyNode) throws DAOException;
+
+    int mergePackageDependsOnPackage(JSONObject dependencyNode) throws DAOException;
 }

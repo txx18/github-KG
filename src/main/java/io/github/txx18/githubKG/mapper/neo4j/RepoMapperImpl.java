@@ -361,12 +361,14 @@ public class RepoMapperImpl implements RepoMapper {
                 "SET dst_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (repo)-[depends_repo:REPO_DEPENDS_ON_REPO]->(dst_repo)\n" +
                 "  ON CREATE SET depends_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+                "SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_repo.requirements = $requirements";
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
                         "nameWithOwner", repository.get("nameWithOwner"),
-                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner")
+                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
+                        "requirements", dependencyNode.getOrDefault("requirements", "")
                 ));
                 return 1;
             });
@@ -381,7 +383,7 @@ public class RepoMapperImpl implements RepoMapper {
     @Override
     public int mergeRepoDevelopsPackage(JSONObject dependencyNode) throws DAOException {
         String query = "// Repository - REPO_DEVELOPS_PACKAGE -> Package\n" +
-                "MATCH (dst_repo:Repository {nameWithOwner: $desRepoNameWithOwner})\n" +
+                "MATCH (dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})\n" +
                 "MATCH (package:Package {nameWithManager: $packageNameWithManager})\n" +
                 "MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)\n" +
                 "  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -389,13 +391,39 @@ public class RepoMapperImpl implements RepoMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "desRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
+                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
                         "packageNameWithManager", dependencyNode.get("packageManager") + "/" + dependencyNode.get("packageName")
                 ));
                 return 1;
             });
         } catch (Exception e) {
             String log = "mergeRepoRepo failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return 1;
+    }
+
+    @Override
+    public int mergePackageDependsOnPackage(JSONObject dependencyNode) throws DAOException {
+        String query = "// Package - PACKAGE_DEPENDS_ON_PACKAGE -> Package\n" +
+                "// 可以实时插入时运行，但是保证了实时就不能保证完整，即在merge主repo时，当时dst_repo并没有依赖数据，但是以后爬取到它它有了，以前它DEVELOPS的PackA并不能与packB建立关系\n" +
+                "MATCH\n" +
+                "  p = (packB:Package)<-[repo_pack:REPO_DEPENDS_ON_PACKAGE]-(dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})\n" +
+                "    -[:REPO_DEVELOPS_PACKAGE]->(packA:Package)\n" +
+                "MERGE (packA)-[pack_pack:PACKAGE_DEPENDS_ON_PACKAGE]->(packB)\n" +
+                "  ON CREATE SET pack_pack.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET pack_pack.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET pack_pack.requirements = repo_pack.requirements";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner")
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoRepo failed! dstRepoNameWithOwner: " + ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner");
             logger.error(log, e);
             throw new DAOException(log);
         }

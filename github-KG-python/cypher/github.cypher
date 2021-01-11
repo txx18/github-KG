@@ -107,6 +107,13 @@ SET depends_package.filename = $filename
 SET depends_package.parseable = $parseable
 SET depends_package.requirements = $requirements
 
+// Repository - REPO_DEVELOPS_PACKAGE -> Package
+MATCH (dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})
+MATCH (package:Package {nameWithManager: $packageNameWithManager})
+MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)
+  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+
 // Repository - REPO_DEPENDS_ON_REPO -> Repository
 MATCH (repo:Repository {nameWithOwner: $nameWithOwner})
 MERGE(dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})
@@ -115,11 +122,21 @@ SET dst_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm
 MERGE (repo)-[depends_repo:REPO_DEPENDS_ON_REPO]->(dst_repo)
   ON CREATE SET depends_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET depends_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET depends_repo.requirements = $requirements
 
+// Package - PACKAGE_DEPENDS_ON_PACKAGE -> Package
+// 可以实时插入时运行，但是保证了实时就不能保证完整，即在merge主repo时，当时dst_repo并没有依赖数据，但是以后爬取到它它有了，以前它DEVELOPS的PackA并不能与packB建立关系
+MATCH
+  p = (packB:Package)<-[repo_pack:REPO_DEPENDS_ON_PACKAGE]-(dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})
+    -[:REPO_DEVELOPS_PACKAGE]->(packA:Package)
+MERGE (packA)-[pack_pack:PACKAGE_DEPENDS_ON_PACKAGE]->(packB)
+  ON CREATE SET pack_pack.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET pack_pack.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET pack_pack.requirements = repo_pack.requirements
 
-// Repository - REPO_DEVELOPS_PACKAGE -> Package
-MATCH (dst_repo:Repository {nameWithOwner: $desRepoNameWithOwner})
-MATCH (package:Package {nameWithManager: $packageNameWithManager})
-MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)
-  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+// 离线更新 Package的同质依赖
+MATCH p = (packB:Package)<-[repo_pack:REPO_DEPENDS_ON_PACKAGE]-(:Repository)-[:REPO_DEVELOPS_PACKAGE]->(packA:Package)
+MERGE (packA)-[pack_pack:PACKAGE_DEPENDS_ON_PACKAGE]->(packB)
+  ON CREATE SET pack_pack.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET pack_pack.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET pack_pack.requirements = repo_pack.requirements

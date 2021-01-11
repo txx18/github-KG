@@ -1,7 +1,7 @@
+import jsonpath
 import requests
 
 from util.FileUtils import *
-import jsonpath
 
 
 def transCoOccurrenceNetworkNoRequirements():
@@ -64,6 +64,7 @@ def createRepoByJsonFile_batch(dir_path):
         #     continue
         json_dic = read_json_file(os.path.join(dir_path, repo_file))
         nameWithOwner = jsonpath.jsonpath(json_dic, "$.data.repository.nameWithOwner")[0]
+        print("file_index: " + str(i) + ", inserting: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
         dgm_count = jsonpath.jsonpath(json_dic, "$.data.repository.dependencyGraphManifests.totalCount")[0]
         # 过滤没有依赖的repo
         if dgm_count == 0:
@@ -71,7 +72,6 @@ def createRepoByJsonFile_batch(dir_path):
         response = createRepoByJsonFile(dir_path + "/" + repo_file)
         if json.loads(response).get("status") == "success":
             insert_repo_count += 1
-            print("file_index: " + str(i) + ", insert: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
         else:
             print(json.loads(response))
             break
