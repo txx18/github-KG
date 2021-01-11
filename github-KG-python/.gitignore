@@ -3,7 +3,7 @@
 *.zip
 /test
 /result
-/cypher
+/cypher/ignore
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
