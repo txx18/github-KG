@@ -49,12 +49,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return mergeTaskUnion(jsonArray);
     }
 
-    /**
-     * Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
-     *
-     * @param jsonArray
-     * @return
-     */
     @Override
     public int importLinksBetweenPapersAndCodeJson(String filePath) throws DAOException {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
@@ -75,6 +69,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("paperArxivId", paperArxivId);
             params.put("paperUrlAbs", paperUrlAbs);
             params.put("paperUrlPdf", paperUrlPdf);
+            // merge Paper （links-between-papers-and-code.json）
             int resPaper = papersWithCodeMapper.mergePaperLBPACJson(params);
             String repoUrl = (String) jsonObject.getOrDefault("repo_url", "");
             // repoUrl为空则跳过
@@ -90,22 +85,13 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             Object mentionedInGithub = jsonObject.getOrDefault("mentioned_in_github", "");
             params.put("mentionedInGithub", mentionedInGithub == "" ? -1 : ((boolean)(mentionedInGithub) ? 1 : 0));
             params.put("framework", framework);
+            // Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
             int res = papersWithCodeMapper.mergePaperRepo(params);
             System.out.println("importLinksBetweenPapersAndCodeJson: " + i + "/" + jsonArray.size());
         }
         return 1;
     }
 
-    /**
-     * Method
-     * Method - METHOD_INTRODUCED_IN_PAPER -> Paper
-     * Collection - COLLECTION_HAS_METHOD -> Method
-     * Area - AREA_HAS_COLLECTION -> Collection
-     *
-     * @param filePath
-     * @return
-     * @throws DAOException
-     */
     @Override
     public int importMethodsJson(String filePath) throws DAOException {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
@@ -127,12 +113,14 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("description", description);
             params.put("codeSnippetUrl", codeSnippetUrl);
             params.put("introducedYear", introducedYear);
+            // merge Method
             int resMethod = papersWithCodeMapper.mergeMethodMethodsJson(params);
             String dashPaperTitle = (String) jsonObject.getOrDefault("paper", "");
             // introPaperTitle 不为空才执行
             if (!StrUtil.isBlankIfStr(dashPaperTitle)) {
                 params.put("dashPaperTitle", dashPaperTitle);
-                int resMethodPaper = this.mergeMethodPaper(params);
+                // Method - METHOD_INTRODUCED_IN_PAPER -> Paper
+                int resMethodPaper = this.mergeMethodIntroInPaper(params);
             }
             JSONArray collections = ((JSONArray) jsonObject.getOrDefault("collections", JSONUtil.createArray()));
             for (int j = 0; j < collections.size(); j++) {
@@ -141,6 +129,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 // collectionName不为空才执行
                 if (!StrUtil.isBlankIfStr(collectionName)) {
                     params.put("collectionName", collectionName);
+                    // Collection - COLLECTION_HAS_METHOD -> Method
                     int resCollectionMethod = papersWithCodeMapper.mergeCollectionMethod(params);
                     String areaName = (String) collection.getOrDefault("area", "");
                     // area不为空才执行
@@ -148,6 +137,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                         String areaId = (String) collection.getOrDefault("area_id", "");
                         params.put("areaId", areaId);
                         params.put("areaName", areaName);
+                        // Area - AREA_HAS_COLLECTION -> Collection
                         int resAreaColleciton = papersWithCodeMapper.mergeAreaCollection(params);
                     }
                 }
@@ -157,7 +147,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return 1;
     }
 
-    private int mergeMethodPaper(Map<String, Object> params) throws DAOException {
+    private int mergeMethodIntroInPaper(Map<String, Object> params) throws DAOException {
         String dashPaperTitle = ((String) params.get("dashPaperTitle"));
         // introPaperTitle是连字符连接的，需要分词匹配，如果匹配到了与那个paper连接，没匹配到就新建paper连接
         String[] dashTitleTokens = StrUtil.split(dashPaperTitle, "-");
@@ -170,6 +160,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         // 存在判定标准：titleTokens里的tokens与查询到的dashTitleTokens分词的tokens是否顺次相等；二者都去掉空格标点，其中一个是另一个的开头忽略大小写
         boolean isPaperExist = false;
         String existPaperTitle = "";
+        // 依次判断召回的titles
         outer:
         for (String title : titles) {
             String[] titleTokens = title.split("\\W+");
@@ -177,21 +168,24 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             if (titleTokens.length < dashTitleTokens.length) {
                 continue outer;
             }
+            // 顺次比较tokens
             for (int i = 1; i < dashTitleTokens.length; i++) {
                 // 如果有一个token不同，则比较下一个title
                 if (!StrUtil.equalsIgnoreCase(dashTitleTokens[i], titleTokens[i])) {
                     continue outer;
                 }
-                // token全相同，认为存在paper
-                isPaperExist = true;
-                existPaperTitle = title;
-                break outer;
+                // 否则比较下一个token
+                continue;
             }
+            // token全相同，认为存在paper
+            isPaperExist = true;
+            existPaperTitle = title;
+            break;
         }
         // 暂且先只连接到“存在”的 paper 上，对于不存在的，本来应该merge上去（待完成）
         if (isPaperExist) {
             params.put("existPaperTitle", existPaperTitle);
-            int resMethodPaperExist = papersWithCodeMapper.mergeMethodPaperExist(params);
+            int resMethodPaperExist = papersWithCodeMapper.mergeMethodIntroInPaperExist(params);
         } else {
             // todo 暂时通过dashTitle获得完整paperTitle还没有比较好的方式，而dashTitle作为paperTitle又不好，所以先不merge了
 //            int resMethodPaper = papersWithCodeMapper.mergeMethodPaperNotExist(params);
@@ -199,17 +193,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return 1;
     }
 
-    /**
-     * Paper （PWAJson）
-     * Paper - PAPER_WRITTEN_BY_AUTHOR -> Author
-     * Task - TASK_HAS_PAPER -> Paper
-     * Paper - Paper_USES_METHOD -> Method
-     * Method - Method_MAIN_UNDER_COLLECTION -> Collection
-     * Area - AREA_HAS_COLLECTION -> Collection
-     *
-     * @param filePath
-     * @return
-     */
     @Override
     public int importPapersWithAbstractJson(String filePath) throws DAOException {
         JSONArray jsonArray = (JSONArray) JSONUtil.readJSON(new File(filePath), StandardCharsets.UTF_8);
@@ -236,6 +219,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("urlPdf", urlPdf);
             params.put("proceeding", proceeding);
             params.put("date", date);
+            // merge Paper （PWAJson）
             int resPaper = papersWithCodeMapper.mergePaperPWAJson(params);
             // Author的同名如果放任merge的话，是一个比较严重的知识错误，因为同名的概率还是挺大的
             /*JSONArray authors = (JSONArray) jsonObject.getOrDefault("authors", JSONUtil.createArray());
@@ -246,6 +230,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                     continue;
                 }
                 params.put("authorName", authorName);
+                // Paper - PAPER_WRITTEN_BY_AUTHOR -> Author
                 int resPaperAuthor = papersWithCodeMapper.mergePaperAuthor(params);
             }*/
             JSONArray tasks = (JSONArray) jsonObject.getOrDefault("tasks", JSONUtil.createArray());
@@ -256,6 +241,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                     continue;
                 }
                 params.put("taskName", taskName);
+                // Task - TASK_HAS_PAPER -> Paper
                 int resTaskPaper = papersWithCodeMapper.mergeTaskPaper(params);
             }
             JSONArray methods = (JSONArray) jsonObject.getOrDefault("methods", JSONUtil.createArray());
@@ -273,7 +259,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("description", description);
                 params.put("codeSnippetUrl", codeSnippetUrl);
                 params.put("introducedYear", jsonObject.getOrDefault("introduced_year", ""));
+                // merge Method （papers-with-abstracts.json）
                 int resMethod = papersWithCodeMapper.mergeMethodPWAJson(params);
+                // Paper - Paper_USES_METHOD -> Method
                 int resPaperMethod = papersWithCodeMapper.mergePaperUsesMethod(params);
                 JSONObject collection = (JSONObject) method.getOrDefault("main_collection", JSONUtil.createObj());
                 String collectionName = (String) collection.getOrDefault("name", "");
@@ -282,11 +270,13 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                     String collectionDescription = (String) collection.getOrDefault("description", "");
                     params.put("collectionName", collectionName);
                     params.put("collectionDescription", collectionDescription);
+                    // Method - Method_MAIN_UNDER_COLLECTION -> Collection
                     int resMethodMainCollection = papersWithCodeMapper.mergeMethodMainCollection(params);
                     String areaName = (String) collection.getOrDefault("area", "");
                     // area不为空才执行
                     if (!StrUtil.isBlankIfStr(areaName)) {
                         params.put("areaName", areaName);
+                        // Area - AREA_HAS_COLLECTION -> Collection
                         int resAreaColleciton = papersWithCodeMapper.mergeAreaCollection(params);
                     }
                 }
@@ -322,19 +312,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return 1;
     }
 
-
-    /**
-     * Task - TASK_HAS_MODEL -> Model
-     * Model - MODEL_ON_DATASET -> Dataset
-     * Model - MODEL_INTRODUCED_IN_PAPER -> Paper
-     * Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
-     * 'model_links' 都为[]
-     *
-     * @param jsonObject
-     * @param dataset
-     * @return
-     * @throws DAOException
-     */
     private int mergeModelPaperRepoUnion(JSONObject jsonObject, JSONObject dataset) throws DAOException {
         String taskName = (String) jsonObject.getOrDefault("task", "");
         JSONArray rows = (JSONArray) ((JSONObject) dataset.getOrDefault("sota", JSONUtil.createObj())).getOrDefault(
@@ -351,6 +328,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             if (!StrUtil.isBlankIfStr(taskName)) {
                 params.put("taskName", taskName);
                 params.put("modelName", modelName);
+                // Task - TASK_HAS_MODEL -> Model
                 int res1 = papersWithCodeMapper.mergeTaskModel(params);
             }
             JSONObject metrics = (JSONObject) model.getOrDefault("metrics", JSONUtil.createObj());
@@ -362,6 +340,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("metricName", metricName);
                 params.put("metricValue", metricValue);
                 // model&dataset都保证存在，顺便merge了model
+                // Model - MODEL_ON_DATASET -> Dataset
                 int res2 = papersWithCodeMapper.createModelMetricDataset(params);
             }
             // 即将merge的paper和repo是平级的，不能随便卫语句跳出for循环，不然另一个就被忽略了，通过单if语句控制逻辑
@@ -373,6 +352,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("paperTitle", paperTitle);
                 params.put("paperUrl", paperUrl);
                 params.put("paperDate", paperDate);
+                // Model - MODEL_INTRODUCED_IN_PAPER -> Paper
                 int res3 = papersWithCodeMapper.mergeModelPaper(params);
             }
             JSONArray codeLinks = (JSONArray) model.getOrDefault("code_links", JSONUtil.createArray());
@@ -384,6 +364,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 if (!StrUtil.isBlankIfStr(nameWithOwner)) {
                     params.put("nameWithOwner", nameWithOwner);
                     params.put("githubUrl", codeLink.getOrDefault("url", ""));
+                    // Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
                     int res4 = papersWithCodeMapper.mergeModelRepo(params);
                 }
             }
@@ -393,8 +374,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
-     * Task - TASK_HAS_DATASET -> Dataset
-     * uniom
      * 字段 'dataset_citations' 'dataset_links' 'subdatasets'都为[]
      *
      * @param jsonObject
@@ -414,6 +393,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("taskName", taskName);
                 params.put("datasetName", datasetName);
                 params.put("description", description);
+                // Task - TASK_HAS_DATASET -> Dataset
                 int res = papersWithCodeMapper.mergeTaskDataset(params);
             }
             // 嵌套关系，如果要分方法写的话，也嵌套调用
@@ -424,7 +404,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
 
 
     /**
-     * Task - TASK_HAS_SUBTASK -> Subtask
      * subtask是task的递归嵌套
      * <p>
      * 字段'source_link'都为null
@@ -452,6 +431,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("taskName", taskName);
             params.put("subtaskName", subtaskName);
             params.put("description", description);
+            // Task - TASK_HAS_SUBTASK -> Subtask
             int res = papersWithCodeMapper.mergeTaskSubtask(params);
         }
         // 递归嵌套
@@ -459,13 +439,6 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         return 1;
     }
 
-    /**
-     * Category - CATEGORY_HAS_TASK -> Task
-     *
-     * @param jsonObject
-     * @return
-     * @throws Exception
-     */
     private int mergeCategoryTask(JSONObject jsonObject) throws Exception {
         String taskName = (String) jsonObject.getOrDefault("task", "");
         if (StrUtil.isBlankIfStr(taskName)) {
@@ -482,6 +455,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             String category = (String) categories.get(j);
             if (!StrUtil.isBlankIfStr(category)) {
                 params.put("category", category);
+                // Category - CATEGORY_HAS_TASK -> Task
                 int resCategoryTask = papersWithCodeMapper.mergeCategoryTask(params);
             }
         }

@@ -47,7 +47,7 @@ public interface PapersWithCodeMapper {
 
     List<String> matchPaperStartWith(String firstToken) throws DAOException;
 
-    int mergeMethodPaperExist(Map<String, Object> params) throws DAOException;
+    int mergeMethodIntroInPaperExist(Map<String, Object> params) throws DAOException;
 
     int mergePaperUsesMethod(Map<String, Object> params) throws DAOException;
 }

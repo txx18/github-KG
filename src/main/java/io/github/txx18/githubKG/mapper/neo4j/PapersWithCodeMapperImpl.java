@@ -587,7 +587,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergeMethodPaperExist(Map<String, Object> params) throws DAOException {
+    public int mergeMethodIntroInPaperExist(Map<String, Object> params) throws DAOException {
         String query = "// if paper exist\n" +
                 "MATCH (method:Method {name: $methodName})\n" +
                 "MERGE (paper:Paper {paperTitle: $existPaperTitle})\n" +
@@ -606,7 +606,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
             });
         } catch (Exception e) {
             String log =
-                    "mergeMethodPaperExist failed! method: " + params.get("methodName") + " - paper: " + params.get("existPaperTitle");
+                    "mergeMethodIntroInPaperExist failed! method: " + params.get("methodName") + " - paper: " + params.get("existPaperTitle");
             logger.error(log, e);
             throw new DAOException(log);
         }
