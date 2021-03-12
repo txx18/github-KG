@@ -1,11 +1,11 @@
+import base64
 import hashlib
 import logging
 import random
 import time
-from lxml import etree
-from bs4 import BeautifulSoup
 
 import requests
+from lxml import etree
 
 from src import queries
 from src.data import Paperswithcode
@@ -126,6 +126,8 @@ class GithubAPIv3(object):
 
     def __init__(self):
         self.api = "https://api.github.com/"
+        self.retry_times = 0
+        self.fail_times = 0
 
     def search_topic_page_repos(self, q, sort, order, per_page, out_dir_path):
         print("begin to search: " + q)
@@ -167,6 +169,74 @@ class GithubAPIv3(object):
                 print("error at page" + str(pageNo) + "...retrying...")
                 continue
         print("search finished")
+
+    def get_repo_readme(self, owner, repo, out_dir_path):
+        print("\nbegin to get: " + owner + "/" + repo)
+        while True:
+            tokens = read_token()
+            token = tokens[random.randint(0, len(tokens) - 1)].strip()
+            # accept	header	Setting to application/vnd.github.v3+json is recommended.
+            headers = {"Authorization": "token %s" % token,
+                       "Accept": "application/vnd.github.v3+json"}
+            url = self.api + "repos/%s/%s/readme" % (owner, repo)
+            try:
+                # 设置timeout?
+                response = requests.get(url=url, headers=headers, timeout=10)
+                response_json = response.json()
+                print("response.status_code: " + str(response.status_code))
+                if response.status_code != 200:
+                    if response.status_code == 404:
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", owner + "/" +
+                                               repo)
+                        log = 'request error 404 at:  \033[31m' + owner + '/' + repo + '\033[0m'
+                        print(log)
+                        break
+                    raise Exception("request error")
+                print(headers)
+                print("X-RateLimit-Limit: " + str(response.headers.get("X-RateLimit-Limit")))
+                print("X-RateLimit-Remaining: " + str(response.headers.get("X-RateLimit-Remaining")))
+                print('X-RateLimit-Reset: ' + str(response.headers.get("X-RateLimit-Reset")))
+                readme = response_json.get('content')
+                readme = base64.urlsafe_b64decode(readme).decode('utf-8')
+                out_file = out_dir_path + '/' + owner + "-$-" + repo + ".md"
+                write_file(out_dir_path, out_file, readme)
+                print("write to file: " + out_file)
+                # 全部完成 break
+                self.fail_times = 0
+                break
+            except Exception as e:
+                if self.fail_times >= 10:
+                    print("\033[33m failed over 10 repos... stop! \033[0m")
+                    return
+                self.retry_times += 1
+                if self.retry_times >= 10:
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", owner + "/" +
+                                           repo)
+                    self.retry_times = 0
+                    self.fail_times += 1
+                    break
+                else:
+                    time.sleep(5)
+                    logger.info(e)
+                    print("exception at: \033[31m" + owner + "/" + repo + "\033[0m, message: \033[31m" + str(
+                        e) + "\033[0m" + ", \033[33m retrying...\033[0m")
+                    continue
+
+
+v3 = GithubAPIv3()
+
+
+def get_repo_readme_batch(data_file, out_dir):
+    data = pd.read_csv(data_file)
+    repo_row_list = data.iloc[:, 0:1].values.tolist()
+    repo_list = []
+    for repo_row in repo_row_list:
+        repo_list.append(repo_row[0])
+    payload_repo_list = get_payload_repo_list(set(repo_list), out_dir)
+    for repo in payload_repo_list:
+        owner, repo = repo.split('/')
+        v3.get_repo_readme(owner, repo, out_dir)
+    print("get_repo_readme_batch finished!")
 
 
 class GithubAPIv4(object):
@@ -370,6 +440,24 @@ def get_repos_batch(json_file_path, out_dir_path):
             minute_crawl_count = 0
         print("has crawled: " + str(crawled_count) + "/" + str(len(payload_repo_list)))
 
+def get_payload_repo_list(raw_repo_set, out_dir_path):
+    data_repo_set = get_data_repo_set(out_dir_path)
+    try:
+        exclude_repo_list = read_file_lines(out_dir_path + "/exclude/exclude_repo.txt")
+    except FileNotFoundError as e:
+        exclude_repo_list = []
+    try:
+        # 重试次数过多的，先不爬取，有时候因为断网导致被记录的，可以清空之后就能对这些重新爬取
+        retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
+    except FileNotFoundError as e:
+        retry_over_repo_list = []
+    for i in range(len(exclude_repo_list)):
+        exclude_repo_list[i] = exclude_repo_list[i].strip()
+    for i in range(len(retry_over_repo_list)):
+        retry_over_repo_list[i] = retry_over_repo_list[i].strip()
+    exclude_repo_set = set(exclude_repo_list)
+    retry_over_repo_set = set(retry_over_repo_list)
+    return raw_repo_set - data_repo_set - exclude_repo_set - retry_over_repo_set
 
 def crawl_repo_on_two_machine(not_exist_repo_set):
     payload_repo_list = []

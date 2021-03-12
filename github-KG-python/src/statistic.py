@@ -1,9 +1,10 @@
 import os
+import shutil
+
+import jsonpath
+import pandas as pd
 
 from util.FileUtils import read_json_file
-import jsonpath
-import shutil
-import pandas as pd
 
 
 def stat_topic_set(repo_dir_path):
@@ -178,8 +179,8 @@ def get_data_topic_repo_set(topic_repo_path):
 def get_data_repo_set(repo_dir_path):
     res_list = []
     for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
-        if os.path.splitext(repo_file)[1] != ".json":
-            continue
-        owner, repoName = os.path.splitext(repo_file)[0].split("-$-")
-        res_list.append(owner + "/" + repoName)
+        ext = os.path.splitext(repo_file)[1]
+        if ext == ".json" or ext == '.md':
+            owner, repoName = os.path.splitext(repo_file)[0].split("-$-")
+            res_list.append(owner + "/" + repoName)
     return set(res_list)
