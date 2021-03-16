@@ -176,11 +176,11 @@ def get_data_topic_repo_set(topic_repo_path):
     return set(res_list)
 
 
-def get_data_repo_set(repo_dir_path):
+def get_exist_repo_list(repo_dir_path):
     res_list = []
     for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
         ext = os.path.splitext(repo_file)[1]
         if ext == ".json" or ext == '.md':
             owner, repoName = os.path.splitext(repo_file)[0].split("-$-")
             res_list.append(owner + "/" + repoName)
-    return set(res_list)
+    return res_list

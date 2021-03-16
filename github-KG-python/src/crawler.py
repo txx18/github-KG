@@ -170,25 +170,28 @@ class GithubAPIv3(object):
                 continue
         print("search finished")
 
-    def get_repo_readme(self, owner, repo, out_dir_path):
-        print("\nbegin to get: " + owner + "/" + repo)
+    def get_repo_readme(self, repo_full_name, out_dir_path):
+        owner, repoName = repo_full_name.split("/")
+        print("\nbegin to get: " + repo_full_name)
         while True:
             tokens = read_token()
             token = tokens[random.randint(0, len(tokens) - 1)].strip()
             # accept	header	Setting to application/vnd.github.v3+json is recommended.
             headers = {"Authorization": "token %s" % token,
                        "Accept": "application/vnd.github.v3+json"}
-            url = self.api + "repos/%s/%s/readme" % (owner, repo)
+            url = self.api + "repos/%s/%s/readme" % (owner, repoName)
             try:
                 # 设置timeout?
-                response = requests.get(url=url, headers=headers, timeout=10)
+                response = requests.get(url=url,
+                                        headers=headers,
+                                        # timeout=10
+                                        )
                 response_json = response.json()
                 print("response.status_code: " + str(response.status_code))
                 if response.status_code != 200:
                     if response.status_code == 404:
-                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", owner + "/" +
-                                               repo)
-                        log = 'request error 404 at:  \033[31m' + owner + '/' + repo + '\033[0m'
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
+                        log = 'request error 404 at:  \033[31m' + owner + '/' + repoName + '\033[0m'
                         print(log)
                         break
                     raise Exception("request error")
@@ -198,27 +201,30 @@ class GithubAPIv3(object):
                 print('X-RateLimit-Reset: ' + str(response.headers.get("X-RateLimit-Reset")))
                 readme = response_json.get('content')
                 readme = base64.urlsafe_b64decode(readme).decode('utf-8')
-                out_file = out_dir_path + '/' + owner + "-$-" + repo + ".md"
+                out_file = out_dir_path + '/' + owner + "-$-" + repoName + ".md"
                 write_file(out_dir_path, out_file, readme)
                 print("write to file: " + out_file)
                 # 全部完成 break
                 self.fail_times = 0
                 break
             except Exception as e:
+                # 连续10次重试10次，认为连续失败，比如断网了，停止程序
                 if self.fail_times >= 10:
                     print("\033[33m failed over 10 repos... stop! \033[0m")
-                    return
+                    return "poor network"
                 self.retry_times += 1
-                if self.retry_times >= 10:
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", owner + "/" +
-                                           repo)
+                # 重试超过10次，记录并跳过（break完成跳过）
+                if self.retry_times >= 5:
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
                     self.retry_times = 0
                     self.fail_times += 1
                     break
+                # 否则重试（continue完成重试）
+                # 已知异常：1、DGM在loading的异常； 2、HTTP连接异常
                 else:
                     time.sleep(5)
                     logger.info(e)
-                    print("exception at: \033[31m" + owner + "/" + repo + "\033[0m, message: \033[31m" + str(
+                    print("exception at: \033[31m" + owner + "/" + repoName + "\033[0m, message: \033[31m" + str(
                         e) + "\033[0m" + ", \033[33m retrying...\033[0m")
                     continue
 
@@ -226,16 +232,12 @@ class GithubAPIv3(object):
 v3 = GithubAPIv3()
 
 
-def get_repo_readme_batch(data_file, out_dir):
-    data = pd.read_csv(data_file)
-    repo_row_list = data.iloc[:, 0:1].values.tolist()
-    repo_list = []
-    for repo_row in repo_row_list:
-        repo_list.append(repo_row[0])
-    payload_repo_list = get_payload_repo_list(set(repo_list), out_dir)
-    for repo in payload_repo_list:
-        owner, repo = repo.split('/')
-        v3.get_repo_readme(owner, repo, out_dir)
+def get_repo_readme_batch(target, **kwargs):
+    out_dir = kwargs.get('out_dir')
+    target_repo_list = get_target_repo_list(target, **kwargs)
+    payload_repo_set = get_payload_repo_set(target_repo_list, out_dir)
+    for repo_full_name in payload_repo_set:
+        v3.get_repo_readme(repo_full_name, out_dir)
     print("get_repo_readme_batch finished!")
 
 
@@ -268,7 +270,8 @@ class GithubAPIv4(object):
                 continue
         print("get_relate_topics finished")
 
-    def get_repo(self, repo_full_name, out_dir_path):
+    def get_repo(self, target, repo_full_name, out_dir_path):
+        print('\n')
         owner, repoName = repo_full_name.split("/")
         query = queries.repos_query % (owner, repoName)
         # manifest_pageNo = 1
@@ -282,7 +285,11 @@ class GithubAPIv4(object):
             headers = {"Authorization": "Bearer %s" % token,
                        "Accept": "application/vnd.github.hawkgirl-preview+json"}
             try:
-                response = requests.post(url=self.api, headers=headers, json={"query": query})
+                response = requests.post(url=self.api,
+                                         headers=headers,
+                                         json={"query": query},
+                                         # timeout=30
+                                         )
                 response_json = response.json()
                 # 处理errors，分情况处理
                 errors = response_json.get('errors')
@@ -309,7 +316,7 @@ class GithubAPIv4(object):
                         raise Exception(log)
                 # 如果过滤仓库时出现异常，分情况处理
                 try:
-                    exclude = self.filter_repo(response_json)
+                    exclude = self.filter_repo(target, response_json)
                 except Exception as e:
                     print(e)
                     # null repo异常 记录exclude仓库，跳过
@@ -346,15 +353,16 @@ class GithubAPIv4(object):
                 # 连续10次重试10次，认为连续失败，比如断网了，停止程序
                 if self.fail_times >= 10:
                     print("\033[33m failed over 10 repos... stop! \033[0m")
-                    return
+                    return "poor network"
                 self.retry_times += 1
                 # 重试超过10次，记录并跳过（break完成跳过）
-                if self.retry_times >= 10:
+                if self.retry_times >= 5:
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
                     self.retry_times = 0
                     self.fail_times += 1
                     break
                 # 否则重试（continue完成重试）
+                # 已知异常：1、DGM在loading的异常； 2、HTTP连接异常
                 else:
                     time.sleep(5)
                     logger.info(e)
@@ -362,10 +370,11 @@ class GithubAPIv4(object):
                         e) + "\033[0m" + ", \033[33m retrying...\033[0m")
                     continue
 
-    def filter_repo(self, response_json):
+    def filter_repo(self, target, response_json):
         """
 
         既有过滤自定义过滤repo的作用，也通过验证部分属性验证数据是否有效
+        :param target:
         :param response_json:
         :return:
         """
@@ -382,10 +391,18 @@ class GithubAPIv4(object):
             raise Exception("null repo")
         else:
             pass
+        exclude = False
         # 注意,jsonpath无法区分 没有key 和 有key但value为布尔值的
         # 这些key任何一个值为true的，跳过
         try:
-            exclude = repo["isEmpty"] or repo["isFork"] or repo["isLocked"] or repo["isPrivate"]
+            # todo fork的仓库要不要呢
+            is_empty = repo["isEmpty"]
+            is_fork = repo["isFork"]
+            is_locked = repo["isLocked"]
+            is_private = repo["isPrivate"]
+            # 认为dev_repo的fork不应该排除
+            if target == 2:
+                exclude = is_empty or is_locked or is_private
         except Exception as e:
             # 这些key取 value时异常，则抛出
             raise Exception("no property key exception")
@@ -395,42 +412,20 @@ class GithubAPIv4(object):
 v4 = GithubAPIv4()
 
 
-def get_repos_batch(json_file_path, out_dir_path):
-    json_dic = read_json_file(json_file_path)
-    repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
-    ownerWithName_list = []
-    # 从url提取ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
-    for url in repo_url_list:
-        tokens = url.split("/")
-        owner_with_name = tokens[3] + "/" + tokens[4]
-        ownerWithName_list.append(owner_with_name)
-    ownerWithName_set = set(ownerWithName_list)
+def get_repos_batch(target, **kwargs):
+    out_dir_path = kwargs.get('out_dir')
+    target_repo_set = get_target_repo_list(target, **kwargs)
     # 扫描data_repo_set exclude_repo_list retry_over_repo_list
-    data_repo_set = get_data_repo_set(out_dir_path)
-    try:
-        exclude_repo_list = read_file_lines(out_dir_path + "/exclude/exclude_repo.txt")
-    except FileNotFoundError as e:
-        exclude_repo_list = []
-    try:
-        # 重试次数过多的，先不爬取，有时候因为断网导致被记录的，可以清空之后就能对这些重新爬取
-        retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
-    except FileNotFoundError as e:
-        retry_over_repo_list = []
-    for i in range(len(exclude_repo_list)):
-        exclude_repo_list[i] = exclude_repo_list[i].strip()
-    for i in range(len(retry_over_repo_list)):
-        retry_over_repo_list[i] = retry_over_repo_list[i].strip()
-    exclude_repo_set = set(exclude_repo_list)
-    retry_over_repo_set = set(retry_over_repo_list)
-    not_exist_repo_set = ownerWithName_set - data_repo_set - exclude_repo_set - retry_over_repo_set
+    payload_repo_set = get_payload_repo_set(target_repo_set, out_dir_path)
     # 多机分派
     # payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
-    payload_repo_list = not_exist_repo_set
-    crawled_count = 0
+    crawled_count = len(target_repo_set) - len(payload_repo_set)
     minute_crawl_count = 0
     start_time = time.time()
-    for ownerWithName in payload_repo_list:
-        v4.get_repo(ownerWithName, out_dir_path)
+    for ownerWithName in payload_repo_set:
+        res = v4.get_repo(target, ownerWithName, out_dir_path)
+        if res == 'poor network':
+            break
         crawled_count += 1
         minute_crawl_count += 1
         cur_time = time.time()
@@ -438,10 +433,33 @@ def get_repos_batch(json_file_path, out_dir_path):
             start_time = time.time()
             print("\033[1;35m" + "rate: " + str(minute_crawl_count) + " repos/min \033[0m")
             minute_crawl_count = 0
-        print("has crawled: " + str(crawled_count) + "/" + str(len(payload_repo_list)))
+        print("has crawled: " + str(crawled_count) + "/" + str(len(target_repo_set)))
 
-def get_payload_repo_list(raw_repo_set, out_dir_path):
-    data_repo_set = get_data_repo_set(out_dir_path)
+
+def get_target_repo_list(target, **kwargs):
+    if target == 1:
+        json_file_path = kwargs.get("json_file_path")
+        json_dic = read_json_file(json_file_path)
+        repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
+        ownerWithName_list = []
+        # 从url提取ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
+        for url in repo_url_list:
+            tokens = url.split("/")
+            owner_with_name = tokens[3] + "/" + tokens[4]
+            ownerWithName_list.append(owner_with_name)
+        return ownerWithName_list
+    elif target == 2:
+        data_file = kwargs.get('dev_repos_csv')
+        data = pd.read_csv(data_file)
+        repo_row_list = data.iloc[:, 0:1].values.tolist()
+        repo_list = []
+        for repo_row in repo_row_list:
+            repo_list.append(repo_row[0])
+        return repo_list
+
+
+def get_payload_repo_set(target_repo_list, out_dir_path):
+    exist_repo_list = get_exist_repo_list(out_dir_path)
     try:
         exclude_repo_list = read_file_lines(out_dir_path + "/exclude/exclude_repo.txt")
     except FileNotFoundError as e:
@@ -451,13 +469,20 @@ def get_payload_repo_list(raw_repo_set, out_dir_path):
         retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
     except FileNotFoundError as e:
         retry_over_repo_list = []
+    for i in range(len(target_repo_list)):
+        target_repo_list[i] = target_repo_list[i].strip()
+    for i in range(len(exist_repo_list)):
+        exist_repo_list[i] = exist_repo_list[i].strip()
     for i in range(len(exclude_repo_list)):
         exclude_repo_list[i] = exclude_repo_list[i].strip()
     for i in range(len(retry_over_repo_list)):
         retry_over_repo_list[i] = retry_over_repo_list[i].strip()
+    target_repo_set = set(target_repo_list)
+    exist_repo_set = set(exist_repo_list)
     exclude_repo_set = set(exclude_repo_list)
     retry_over_repo_set = set(retry_over_repo_list)
-    return raw_repo_set - data_repo_set - exclude_repo_set - retry_over_repo_set
+    return target_repo_set - exist_repo_set - exclude_repo_set - retry_over_repo_set
+
 
 def crawl_repo_on_two_machine(not_exist_repo_set):
     payload_repo_list = []
@@ -473,7 +498,7 @@ def crawl_repo_on_two_machine(not_exist_repo_set):
 def get_topic_repos(self, topic_dir_path, out_dir_path):
     data_one_topic_repo_set = get_data_one_topic_repo_set(topic_dir_path)
     # 扫描已有的仓库数据
-    data_repo_set = get_data_repo_set(out_dir_path)
+    data_repo_set = get_exist_repo_list(out_dir_path)
     payload_repo_set = data_one_topic_repo_set - data_repo_set
     for repo in payload_repo_set:
         self.get_repo(repo, out_dir_path)
@@ -501,7 +526,7 @@ def get_topics_repos_batch(topic_repo_dir_path, out_dir_path):
     # 扫描topic需要爬取的仓库
     data_topic_repo_set = get_data_topic_repo_set(topic_repo_dir_path)
     # 扫描已有的仓库数据
-    data_repo_set = get_data_repo_set(out_dir_path)
+    data_repo_set = get_exist_repo_list(out_dir_path)
     payload_repo_set = data_topic_repo_set - data_repo_set
     for repo in payload_repo_set:
         v4.get_repo(repo, out_dir_path)
