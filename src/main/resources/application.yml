@@ -1,0 +1,2 @@
+elasticsearch:
+  hostlist:127.0.0.1:9200 #多个节点用逗号分隔
