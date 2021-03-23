@@ -1,6 +1,6 @@
 package io.github.txx18.githubKG.mapper.elasticsearch;
 
-import io.github.txx18.githubKG.mapper.PackageMapper;
+import io.github.txx18.githubKG.mapper.ElasticsearchMapper;
 import org.apache.http.HttpHost;
 import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.*;
@@ -13,11 +13,11 @@ import java.io.IOException;
  * @create 2021-03-17 10:12
  */
 @Component
-public class PackageMapperImpl implements PackageMapper {
+public class ElasticsearchMapperImpl implements ElasticsearchMapper {
 
     private final RestClient restClient;
 
-    private PackageMapperImpl() {
+    private ElasticsearchMapperImpl() {
         restClientBuilder.setFailureListener(new RestClient.FailureListener() {
             @Override
             public void onFailure(Node node) {

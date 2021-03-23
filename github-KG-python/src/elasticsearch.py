@@ -16,7 +16,7 @@ def import_repo_batch(dir_path):
         json_str = json.dumps(repo)
         nameWithOwner = jsonpath.jsonpath(repo, "$.nameWithOwner")[0]
         print("file_index: " + str(i) + ", inserting: " + str(insert_repo_count) + ", repo: " + str(nameWithOwner))
-        url = "http://localhost:8080/package/importRepo"
+        url = "http://localhost:8080/es/create/batch/repo"
         payload = {"jsonStr": json_str}
         # header_dict = {"Content-Type": "application/json; charset=utf8"}
         # response = requests.post(url=url, data=json_str, headers=header_dict).content.decode("utf-8")

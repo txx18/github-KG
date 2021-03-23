@@ -1,7 +1,7 @@
 package io.github.txx18.githubKG.service.elasticsearch;
 
-import io.github.txx18.githubKG.mapper.elasticsearch.PackageMapperImpl;
-import io.github.txx18.githubKG.service.PackageService;
+import io.github.txx18.githubKG.mapper.elasticsearch.ElasticsearchMapperImpl;
+import io.github.txx18.githubKG.service.ElasticSearchService;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -11,13 +11,12 @@ import java.io.IOException;
  * @create 2021-03-21 15:57
  */
 @Service
-public class PackageServiceImpl implements PackageService {
+public class ElasticsearchServiceImpl implements ElasticSearchService {
+
+    private final ElasticsearchMapperImpl packageMapper;
 
 
-    private final PackageMapperImpl packageMapper;
-
-
-    public PackageServiceImpl(PackageMapperImpl packageMapper) {
+    public ElasticsearchServiceImpl(ElasticsearchMapperImpl packageMapper) {
         this.packageMapper = packageMapper;
     }
 
