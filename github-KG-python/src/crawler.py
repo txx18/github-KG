@@ -2,13 +2,13 @@ import base64
 import hashlib
 import logging
 import random
+import re
 import time
 
 import requests
 from lxml import etree
 
 from src import queries
-from src.data import Paperswithcode
 from src.statistic import *
 from util.FileUtils import *
 
@@ -270,16 +270,16 @@ class GithubAPIv4(object):
                 continue
         print("get_relate_topics finished")
 
-    def get_repo(self, target, repo_full_name, out_dir_path):
+    def get_repo(self, target, raw_nwo, out_dir_path, no_dup_repo_set):
         print('\n')
-        owner, repoName = repo_full_name.split("/")
+        owner, repoName = raw_nwo.split("/")
         query = queries.repos_query % (owner, repoName)
         # manifest_pageNo = 1
         # dependency_pageNo = 1
         # language_pageNo = 1
         # topic_pageNo = 1
         while True:
-            print("begin to get repo: " + owner + "/" + repoName)
+            print("begin to get repo: " + raw_nwo)
             tokens = read_token()
             token = tokens[random.randint(0, len(tokens) - 1)].strip()
             headers = {"Authorization": "Bearer %s" % token,
@@ -306,8 +306,8 @@ class GithubAPIv4(object):
                         print("\033[31m" + log + "\033[0m")
                         raise Exception(log)
                     elif error_type == 'NOT_FOUND':
-                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
-                        log = 'error_type: ' + error_type + ", error_message: " + error_message + str(repo_full_name)
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", raw_nwo)
+                        log = 'error_type: ' + error_type + ", error_message: " + error_message + str(raw_nwo)
                         print("\033[31m" + log + "\033[0m, exclude it in ./exclude/exclude_repo.txt")
                         logger.info(log)
                         break
@@ -321,33 +321,39 @@ class GithubAPIv4(object):
                     print(e)
                     # null repo异常 记录exclude仓库，跳过
                     if str(e) == "null repo":
-                        log = "exception at filter, pass {}, message: {}".format(repo_full_name, e)
+                        log = "exception at filter, pass {}, message: {}".format(raw_nwo, e)
                         print("\033[31m" + log + "\033[0m")
                         logger.exception(log)
-                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
+                        write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", raw_nwo)
                         break
                     # 其他异常应该抛出重试
                     else:
                         raise Exception(e)
                 # 记录exclude仓库，跳过
                 if exclude is True:
-                    log = "exclude " + owner + "/" + repoName
+                    log = "exclude " + raw_nwo
                     print("\033[31m" + log + "\033[0m")
-                    logger.info("exclude " + owner + "/" + repoName)
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", repo_full_name)
+                    logger.info("exclude " + raw_nwo)
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/exclude_repo.txt", raw_nwo)
                     break
                 print("status_code: \033[32m" + str(response.status_code) + "\033[0m")
                 # 不是200异常重试
                 if response.status_code != 200:
                     raise Exception("status code is not 200! ")
                 # TODO 内部有4个字段可能有多页dependencyGraphManifests（嵌套dependencies），languages, repositoryTopics，但是一般都不会超过100个，所以这里统统不考虑了
-                # 写入文件
-                write_json_file(out_dir_path, os.path.join(out_dir_path, owner + "-$-" + repoName + ".json"),
-                                response_json)
-                print("write to file: " + str(os.path.join(out_dir_path, owner + "-$-" + repoName + ".json")))
-                # 全部完成 break
+                # 写入文件，文件名为 owner + "-$-" + repoName + ".json"
+                # todo 统一以数据里的 nameWithOwner 字段为准，如果已经爬过这个nwo了就下一个，这样也就顺便解决了 同nwo不同文件名的问题
+                real_nwo = response_json['nameWithOwner']
+                if real_nwo in no_dup_repo_set:
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/dup_repo.txt", raw_nwo)
+                    break
+                repo_file_name = real_nwo.replace('/', '-$-') + '.json'
+                write_json_file(out_dir_path, os.path.join(out_dir_path, repo_file_name), response_json)
+                print("write to file: " + str(os.path.join(out_dir_path, repo_file_name)))
+                # 全部完成，加入已爬取set break return?
                 self.fail_times = 0
-                break
+                no_dup_repo_set.add(real_nwo)
+                return real_nwo
             # 捕获需要重试的异常
             except Exception as e:
                 # 连续10次重试10次，认为连续失败，比如断网了，停止程序
@@ -357,7 +363,7 @@ class GithubAPIv4(object):
                 self.retry_times += 1
                 # 重试超过10次，记录并跳过（break完成跳过）
                 if self.retry_times >= 5:
-                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
+                    write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", raw_nwo)
                     self.retry_times = 0
                     self.fail_times += 1
                     break
@@ -366,7 +372,7 @@ class GithubAPIv4(object):
                 else:
                     time.sleep(5)
                     logger.info(e)
-                    print("exception at: \033[31m" + owner + "/" + repoName + "\033[0m, message: \033[31m" + str(
+                    print("exception at: \033[31m" + raw_nwo + "\033[0m, message: \033[31m" + str(
                         e) + "\033[0m" + ", \033[33m retrying...\033[0m")
                     continue
 
@@ -415,15 +421,17 @@ v4 = GithubAPIv4()
 def get_repos_batch(target, **kwargs):
     out_dir_path = kwargs.get('out_dir')
     target_repo_set = get_target_repo_list(target, **kwargs)
-    # 扫描data_repo_set exclude_repo_list retry_over_repo_list
+    # 除去 exclude的、重试过多的、nwo重复的
     payload_repo_set = get_payload_repo_set(target_repo_set, out_dir_path)
-    # 多机分派
+    # 如果要多机分派
     # payload_repo_list = crawl_repo_on_two_machine(not_exist_repo_set)
     crawled_count = len(target_repo_set) - len(payload_repo_set)
     minute_crawl_count = 0
     start_time = time.time()
-    for ownerWithName in payload_repo_set:
-        res = v4.get_repo(target, ownerWithName, out_dir_path)
+    no_dup_repo_set = set()
+    for raw_nwo in payload_repo_set:
+        # 单个repo爬取
+        res = v4.get_repo(target, raw_nwo, out_dir_path, no_dup_repo_set)
         if res == 'poor network':
             break
         crawled_count += 1
@@ -437,17 +445,19 @@ def get_repos_batch(target, **kwargs):
 
 
 def get_target_repo_list(target, **kwargs):
+    pattern = re.compile(r'\s+')
     if target == 1:
+        # 从 2 links-between-papers-and-code 获取 repo_url
         json_file_path = kwargs.get("json_file_path")
         json_dic = read_json_file(json_file_path)
         repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
-        ownerWithName_list = []
-        # 从url提取ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
+        nameWithOwner_list = []
+        # 从url提取 ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
         for url in repo_url_list:
             tokens = url.split("/")
-            owner_with_name = tokens[3] + "/" + tokens[4]
-            ownerWithName_list.append(owner_with_name)
-        return ownerWithName_list
+            nameWithOwner = re.sub(pattern, '', tokens[3] + "/" + tokens[4])
+            nameWithOwner_list.append(nameWithOwner)
+        return nameWithOwner_list
     elif target == 2:
         data_file = kwargs.get('dev_repos_csv')
         data = pd.read_csv(data_file)
@@ -459,7 +469,12 @@ def get_target_repo_list(target, **kwargs):
 
 
 def get_payload_repo_set(target_repo_list, out_dir_path):
+    pattern = re.compile(r'\s+')
     exist_repo_list = get_exist_repo_list(out_dir_path)
+    try:
+        dup_repo_list = read_file_lines(out_dir_path + "/exclude/dup_repo.txt")
+    except FileNotFoundError as e:
+        dup_repo_list = []
     try:
         exclude_repo_list = read_file_lines(out_dir_path + "/exclude/exclude_repo.txt")
     except FileNotFoundError as e:
@@ -469,19 +484,18 @@ def get_payload_repo_set(target_repo_list, out_dir_path):
         retry_over_repo_list = read_file_lines(out_dir_path + "/exclude/retry_over_repo.txt")
     except FileNotFoundError as e:
         retry_over_repo_list = []
-    for i in range(len(target_repo_list)):
-        target_repo_list[i] = target_repo_list[i].strip()
     for i in range(len(exist_repo_list)):
-        exist_repo_list[i] = exist_repo_list[i].strip()
+        exist_repo_list[i] = re.sub(pattern, '', exist_repo_list[i])
     for i in range(len(exclude_repo_list)):
-        exclude_repo_list[i] = exclude_repo_list[i].strip()
+        exclude_repo_list[i] = re.sub(pattern, '', exclude_repo_list[i])
     for i in range(len(retry_over_repo_list)):
-        retry_over_repo_list[i] = retry_over_repo_list[i].strip()
+        retry_over_repo_list[i] = re.sub(pattern, '', retry_over_repo_list[i])
     target_repo_set = set(target_repo_list)
     exist_repo_set = set(exist_repo_list)
     exclude_repo_set = set(exclude_repo_list)
     retry_over_repo_set = set(retry_over_repo_list)
-    return target_repo_set - exist_repo_set - exclude_repo_set - retry_over_repo_set
+    dup_repo_set = set(dup_repo_list)
+    return target_repo_set - exist_repo_set - exclude_repo_set - retry_over_repo_set - dup_repo_set
 
 
 def crawl_repo_on_two_machine(not_exist_repo_set):

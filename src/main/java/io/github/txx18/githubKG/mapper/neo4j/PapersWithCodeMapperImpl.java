@@ -211,7 +211,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
                         "modelName", params.get("modelName"),
-                        "nameWithOwner", params.get("nameWithOwner"),
+                        "nameWithOwner", ((String) params.get("nameWithOwner")).replaceAll("\\s*", ""),
                         "githubUrl", params.get("githubUrl")
                 ));
                 return 1;
@@ -228,10 +228,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     @Override
     public int mergePaperRepo(Map<String, Object> params) throws DAOException {
         String query = "// Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
+                "// 这里大坑，url截取的可能有大小写错误导致match不到，可以不区分大小写\n" +
                 "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
-                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
-                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MATCH (repo:Repository)\n" +
+                "  WHERE repo.nameWithOwner =~ '(?i)' + $nameWithOwner\n" +
                 "MERGE (paper)-[link:PAPER_IMPLEMENTED_BY_REPO]->(repo)\n" +
                 "  ON CREATE SET link.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET link.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -242,7 +242,7 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
                         "paperTitle", params.get("paperTitle"),
-                        "nameWithOwner", params.get("nameWithOwner"),
+                        "nameWithOwner", ((String) params.get("nameWithOwner")).replaceAll("\\s*", ""),
                         "mentionedInPaper", params.get("mentionedInPaper"),
                         "mentionedInGithub", params.get("mentionedInGithub"),
                         "framework", params.get("framework")

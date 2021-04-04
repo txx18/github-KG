@@ -1,10 +1,96 @@
 import os
 import shutil
+from collections import defaultdict
 
 import jsonpath
 import pandas as pd
 
 from util.FileUtils import read_json_file
+
+
+def get_file_name_not_match_nameWithOwner(repo_dir):
+    res = []
+    should_file_name_list = []
+    for i, repo_file in enumerate(os.listdir(repo_dir)):
+        if os.path.splitext(repo_file)[1] != '.json':
+            continue
+        json_dic = read_json_file(os.path.join(repo_dir, repo_file))
+        nameWithOwner = jsonpath.jsonpath(json_dic, '$.data.repository.nameWithOwner')[0]
+        should_file_name = nameWithOwner.replace('/', '-$-') + '.json'
+        if should_file_name != repo_file:
+            res.append((repo_file, should_file_name))
+    #         should_file_name_list.append(should_file_name)
+    # should_file_name_set = set(should_file_name_list)
+    return res
+
+
+def get_needless_repo_set(repo_dir, raw_file_list, min_dependency_count):
+    '''
+    1、不同名的仓库，内容完全一样，相当于就换了个名字，对于这种重复只保留一份repo
+    2、没有依赖的repo，这样的独立节点对推荐没用
+
+    :param min_dependency_count:
+    :param repo_dir:
+    :return:
+    '''
+    res_dic = defaultdict(list)
+    dup_dic = defaultdict(list)
+    no_dup_nwo_set = set()
+    # res_set = set()
+    dup_set = set()
+    no_dependency_set = set()
+    less_dependency_set = set()
+    for i, repo_file in enumerate(raw_file_list):
+        if os.path.splitext(repo_file)[1] != ".json":
+            continue
+        json_dic = read_json_file(os.path.join(repo_dir, repo_file))
+        nameWithOwner = jsonpath.jsonpath(json_dic, "$.data.repository.nameWithOwner")[0]
+        if nameWithOwner in no_dup_nwo_set:
+            dup_set.add(repo_file)
+            continue
+        no_dup_nwo_set.add(nameWithOwner)
+        # 过滤没有依赖的repo
+        dgm_count = jsonpath.jsonpath(json_dic, "$.data.repository.dependencyGraphManifests.totalCount")[0]
+        if dgm_count == 0:
+            no_dependency_set.add(repo_file)
+            continue
+        packageName_list = jsonpath.jsonpath(json_dic, "$.data.repository.dependencyGraphManifests.nodes["
+                                                       "*].dependencies.nodes[*].packageName")
+        if packageName_list == False:
+            no_dependency_set.add(repo_file)
+            continue
+        # 过滤依赖数量不够的repo
+        if len(set(packageName_list)) < min_dependency_count:
+            less_dependency_set.add(repo_file)
+            continue
+    # res_set.add(repo_file)
+    #         res_dic[nameWithOwner].append(repo_file)
+    #     for key, val in res_dic.items():
+    #         if len(val) > 1:
+    #             dup_dic[key] = val
+    #     res = list(res_dic.keys())
+    #     return res
+    return dup_set, no_dependency_set, less_dependency_set
+
+
+def get_exist_repo_list(repo_dir_path):
+    res_list = []
+    for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
+        ext = os.path.splitext(repo_file)[1]
+        if ext == ".json" or ext == '.md':
+            json_dic = read_json_file(os.path.join(repo_dir_path, repo_file))
+            nameWithOwner = jsonpath.jsonpath(json_dic, "$.data.repository.nameWithOwner")[0]
+            res_list.append(nameWithOwner)
+    return res_list
+
+
+def get_exist_repo_file_list(dir):
+    res_list = []
+    for repo_index, repo_file in enumerate(os.listdir(dir)):
+        ext = os.path.splitext(repo_file)[1]
+        if ext == ".json" or ext == '.md':
+            res_list.append(repo_file)
+    return res_list
 
 
 def stat_topic_set(repo_dir_path):
@@ -176,11 +262,11 @@ def get_data_topic_repo_set(topic_repo_path):
     return set(res_list)
 
 
-def get_exist_repo_list(repo_dir_path):
-    res_list = []
-    for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
-        ext = os.path.splitext(repo_file)[1]
-        if ext == ".json" or ext == '.md':
-            owner, repoName = os.path.splitext(repo_file)[0].split("-$-")
-            res_list.append(owner + "/" + repoName)
-    return res_list
+class Paperswithcode(object):
+    def get_arxivId_paperTitle_dic(self):
+        json = read_json_file(
+            r"C:\Disk_Dev\Repository\github-KG\github-KG-python\tx_data\resource\paperswithcode\papers-with-abstracts.json")
+        res = {}
+        for item in json:
+            res[item["arxiv_id"]] = item["title"]
+        return res

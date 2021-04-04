@@ -1,22 +1,15 @@
+// 1 evaluation-tables.json
+
 // Task - TASK_UNDER_CATEGORY -> Category
-/*// 好像还不能这么一步到位，因为无法保证不重复
+// 好像还不能这么一步到位，因为无法保证不重复
 //MERGE (task:Task {name: $task})-[under:UNDER_CATEGORY]-(category:CATEGORY {name: $category})
-MERGE (task:Task {name: $taskName})
-  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET task.description = $description
-MERGE (category:Category {name: $category})
-  ON CREATE SET category.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET category.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-MERGE (task)-[under:TASK_UNDER_CATEGORY]->(category)
-  ON CREATE SET under.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET under.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')*/
 
 // Task
 MERGE (task:Task {name: $taskName})
   ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET task.description = $description
+
 // Category - CATEGORY_HAS_TASK -> Task
 MATCH (task:Task {name: $taskName})
 MERGE (category:Category {name: $category})
@@ -25,7 +18,6 @@ SET category.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm
 MERGE (category)-[has:CATEGORY_HAS_TASK]->(task)
   ON CREATE SET has.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET has.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-
 
 // Task - TASK_HAS_DATASET -> Dataset
 MATCH (task:Task {name: $taskName})
@@ -68,8 +60,8 @@ SET model_in_paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd
 
 // Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
 MATCH (model:Model {name: $modelName})
-MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
-  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+MATCH (repo:Repository)
+  WHERE repo.nameWithOwner =~ '(?i)' + $nameWithOwner
 SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET repo.githubUrl = $githubUrl
 MERGE (model)-[implements:MODEL_IMPLEMENTED_BY_REPO]->(repo)
@@ -111,10 +103,10 @@ SET paper.paperArxivId = $paperArxivId
 SET paper.paperUrlAbs = $paperUrlAbs
 SET paper.paperUrlPdf = $paperUrlPdf
 // Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
+// 这里大坑，url截取的可能有大小写错误导致match不到，可以不区分大小写
 MATCH (paper:Paper {paperTitle: $paperTitle})
-MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
-  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+MATCH (repo:Repository)
+  WHERE repo.nameWithOwner =~ '(?i)' + $nameWithOwner
 MERGE (paper)-[link:PAPER_IMPLEMENTED_BY_REPO]->(repo)
   ON CREATE SET link.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET link.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -123,8 +115,7 @@ SET link.mentionedInGithub = $mentionedInGithub
 SET link.framework = $framework
 
 
-
-// Methods.json
+// 3 Methods.json
 
 // Method （methods.json）
 MERGE (method:Method {name: $methodName})
@@ -191,7 +182,7 @@ SET has.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss',
 
 
 
-// papers-with-abstracts.json
+// 4 papers-with-abstracts.json
 
 // Paper （papers-with-abstracts.json）
 MERGE (paper:Paper {paperTitle: $paperTitle})
@@ -239,7 +230,7 @@ MERGE (paper)-[use:PAPER_USES_METHOD]-(method)
   ON CREATE SET use.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET use.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 
-// Method - Method_MAIN_UNDER_COLLECTION -> Collection
+// Method - METHOD_MAIN_UNDER_COLLECTION -> Collection
 MATCH (method:Method {name: $methodName})
 MERGE (coll:Collection {name: $collectionName})
   ON CREATE SET coll.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')

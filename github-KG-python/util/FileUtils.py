@@ -1,5 +1,19 @@
-import os
 import json
+import os
+import shutil
+import traceback
+
+
+def move_file(src_dir, dst_dir, file):
+    try:
+        # cmd = 'chmod -R +x ' + src_path
+        # os.popen(cmd)
+        f_src = os.path.join(src_dir, file)
+        f_dst = os.path.join(dst_dir, file)
+        shutil.move(f_src, f_dst)
+    except Exception as e:
+        print('move_file ERROR: ', e)
+        traceback.print_exc()
 
 
 def read_file_lines(file_path):
@@ -69,3 +83,8 @@ def read_json_file(file_path):
     """
     with open(file_path, 'r', encoding="utf-8") as f:
         return json.load(f)
+
+
+def read_json_file_str(file_path):
+    with open(file_path, 'r', encoding="utf-8") as f:
+        return json.dumps(json.load(f))

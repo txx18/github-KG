@@ -4,14 +4,21 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GithubMapper;
+import io.github.txx18.githubKG.model.DependencyPackage;
+import io.github.txx18.githubKG.model.Page;
 import io.github.txx18.githubKG.service.GithubService;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author ShaneTang
@@ -27,13 +34,112 @@ public class GithubServiceImpl implements GithubService {
     }
 
     @Override
+    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
+        System.out.println("start to refactor: " + nameWithManager);
+        return githubMapper.refactorRepoCoPackageRepo(nameWithManager.replaceAll("\\s*", ""));
+    }
+
+    @Override
+    public List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String recoMethod, int topN) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> repoPortraitMap = objectMapper.readValue(repoPortraitJsonStr, Map.class);
+        List<Map<String, Object>> dependencyMapList = (List<Map<String, Object>>) repoPortraitMap.get("dependency_dic_list");
+//        List<Map<String, Object>> dependencyMapList = JsonPath.read(jsonStr, "$.*"); // dependedTF被转成了BigDecimal
+        List<String> dependencyNameList = new ArrayList<>();
+        for (Map<String, Object> map : dependencyMapList) {
+            dependencyNameList.add(((String) map.get("nameWithManager")).replaceAll("\\s*", ""));
+        }
+        List<Map<String, Object>> res;
+        switch (recoMethod) {
+            case "ICF":
+                res = githubMapper.recommendPackagesExperimentICF(dependencyNameList, dependencyMapList, topN);
+                return res;
+            case "UCF":
+                res = githubMapper.recommendPackagesExperimentUCF(dependencyNameList, dependencyMapList, topN);
+                return res;
+            case "Popular":
+                res = githubMapper.recommendPackagesExperimentPopular(topN);
+                return res;
+            default:
+                throw new Exception("没有选择推荐方法！");
+        }
+    }
+
+
+    @Override
+    public Page<DependencyPackage> recommendPackages(String jsonStr, int pageNum, int pageSize) throws DAOException {
+        Page<DependencyPackage> page = new Page<>();
+        List<Object> dependencyNodes = JsonPath.read(jsonStr, "data.repository" +
+                ".dependencyGraphManifests.nodes[*].dependencies.nodes[*]");
+        double totalDependencyCount = dependencyNodes.size();
+        Map<String, Double> dependencyCountMap = new HashMap<>();
+        // 完成去重、统计
+        for (Object dependencyNode : dependencyNodes) {
+            Map<String, Object> map = (Map<String, Object>) dependencyNode;
+            String nameWithManager = (map.get("packageManager") + "/" + map.get("packageName")).replaceAll("\\s*", "");
+            dependencyCountMap.put(nameWithManager, dependencyCountMap.getOrDefault(nameWithManager, (double) 0) + 1);
+        }
+        // 计算TF
+        dependencyCountMap.replaceAll((k, v) -> dependencyCountMap.get(k) / totalDependencyCount);
+        List<String> dependencyNameList = new ArrayList<>(dependencyCountMap.keySet());
+        // 换一种mapList的格式存储
+        List<Map<String, Object>> dependencyMapList = new ArrayList<>(dependencyCountMap.size());
+        for (Map.Entry<String, Double> entry : dependencyCountMap.entrySet()) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("nameWithManager", entry.getKey());
+            map.put("dependedTF", entry.getValue());
+            dependencyMapList.add(map);
+        }
+        List<String> res = githubMapper.recommendPackages(dependencyNameList, dependencyMapList, pageNum, pageSize);
+        return page;
+    }
+
+    @Override
+    public String updateRepoIDF(String nameWithOwner) throws DAOException {
+        System.out.println("start to update: " + nameWithOwner);
+        return githubMapper.updateRepoIDF(nameWithOwner.replaceAll("\\s*", ""));
+    }
+
+    @Override
+    public String createRepoDependsOnPackage(String nameWithOwner, String nameWithManager, String requirements) throws DAOException {
+        return githubMapper.mergeRepoDependsOnPackage(nameWithOwner.replaceAll("\\s*", ""),
+                nameWithManager.replaceAll("\\s*", ""), requirements);
+    }
+
+    @Override
+    public String deleteRepoDependsOnPackage(String nameWithOwner, String nameWithManager) throws DAOException {
+        return githubMapper.deleteRepoDependsOnPackage(nameWithOwner.replaceAll("\\s*", ""),
+                nameWithManager.replaceAll("\\s*", ""));
+    }
+
+
+    @Override
+    public String updatePackageIDF(String nameWithManager) throws DAOException {
+        System.out.println("start to update: " + nameWithManager);
+        return githubMapper.updatePackageIDF(nameWithManager.replaceAll("\\s*", ""));
+    }
+
+    @Override
+    public String refactorPackageCoOccur(String nameWithOwner) throws DAOException {
+        System.out.println("start to refactor: " + nameWithOwner);
+        return githubMapper.refactorPackageCoOccur(nameWithOwner.replaceAll("\\s*", ""));
+    }
+
+    /**
+     * 对主键属性要特别关照
+     *
+     * @param filePath
+     * @return
+     * @throws Exception
+     */
+    @Override
     public int insertRepoByJsonFile(String filePath) throws Exception {
         // 目前的尝试，这种写法是解析JSONObject自动忽略null值的
         JSONObject jsonObject = JSONUtil.parseObj(JSONUtil.toJsonStr(JSONUtil.readJSONObject(new File(filePath),
                 StandardCharsets.UTF_8)), true);
         JSONObject repository = ((JSONObject) jsonObject.getByPath("data.repository"));
         // nameWithOwner不为空才执行，这个get的确可能为null，但用getOrDefault
-        String nameWithOwner = ((String) repository.getOrDefault("nameWithOwner", ""));
+        String nameWithOwner = ((String) repository.getOrDefault("nameWithOwner", "")).replaceAll("\\s*", "");
         System.out.println("inserting repo: " + nameWithOwner);
         if (!StrUtil.isBlankIfStr(nameWithOwner)) {
             // merger Repository
@@ -43,7 +149,7 @@ public class GithubServiceImpl implements GithubService {
         }
         // owner.login不为空才执行
         String login = ((String) ((JSONObject) repository.getOrDefault("owner", JSONUtil.createObj())).getOrDefault(
-                "login", ""));
+                "login", "")).replaceAll("\\s*", "");
         if (!StrUtil.isBlankIfStr(login)) {
             // Repository - REPO_BELONGS_TO_OWNER -> Owner
             int resRepoOwner = githubMapper.mergeRepoOwner(repository);
@@ -54,8 +160,9 @@ public class GithubServiceImpl implements GithubService {
         for (int i = 0; i < topicNodes.size(); i++) {
             JSONObject topicNode = (JSONObject) topicNodes.get(i);
             // topic.name不为空才执行
-            String topicName = (String) ((JSONObject) topicNode.getOrDefault("topic", JSONUtil.createObj())).getOrDefault(
-                    "name", "");
+            String topicName =
+                    ((String) ((JSONObject) topicNode.getOrDefault("topic", JSONUtil.createObj())).getOrDefault(
+                            "name", "")).trim();
             if (!StrUtil.isBlankIfStr(topicName)) {
                 // Repository - REPO_UNDER_TOPIC -> Topic
                 int resTopicRepo = githubMapper.mergeRepoTopic(repository, topicNode);
@@ -69,7 +176,7 @@ public class GithubServiceImpl implements GithubService {
                         "edges", JSONUtil.createArray());
         for (int i = 0; i < languageNodes.size(); i++) {
             JSONObject languageNode = (JSONObject) languageNodes.get(i);
-            String languageName = (String) languageNode.getOrDefault("name", "");
+            String languageName = ((String) languageNode.getOrDefault("name", "")).trim();
             // languageName为空则跳过
             if (!StrUtil.isBlankIfStr(languageName)) {
                 JSONObject languageEdge = (JSONObject) languageEdges.get(i);
@@ -95,26 +202,27 @@ public class GithubServiceImpl implements GithubService {
             // 已经表达了有dependencyNodes才执行
             for (int j = 0; j < dependencyNodes.size(); j++) {
                 JSONObject dependencyNode = (JSONObject) dependencyNodes.get(j);
-                String packageName = (String) dependencyNode.getOrDefault("packageName", "");
-                String packageManager = (String) dependencyNode.getOrDefault("packageManager", "");
+                String packageName = ((String) dependencyNode.getOrDefault("packageName", "")).replaceAll("\\s*", "");
+                String packageManager = ((String) dependencyNode.getOrDefault("packageManager", "")).replaceAll("\\s*", "");
                 // packageName不为空才执行。这里是真正实体粒度的检查
                 if (!StrUtil.isBlankIfStr(packageName) && !StrUtil.isBlankIfStr(packageManager)) {
                     // Repository - REPO_DEPENDS_ON_PACKAGE -> Package
                     int resRepoPackage = githubMapper.mergeRepoDependsOnPackage(repository, dependencyGraphManifestNode, dependencyNode);
                 }
                 // desRepo不为null（Hutool为JSONNull对象）才执行
-                String dstRepoNameWithOwner =
+                String devRepoNameWithOwner =
                         ((String) ((JSONObject) dependencyNode.getOrDefault("repository", JSONUtil.createObj())).getOrDefault(
-                                "nameWithOwner", ""));
+                                "nameWithOwner", "")).replaceAll("\\s*", "");
                 // dstRepoNameWithOwner不为空才执行
-                if (!StrUtil.isBlankIfStr(dstRepoNameWithOwner)) {
+                if (!StrUtil.isBlankIfStr(devRepoNameWithOwner)) {
                     // Repository - REPO_DEVELOPS_PACKAGE -> Package
                     int resDstRepoPackage = githubMapper.mergeRepoDevelopsPackage(dependencyNode);
-                    // Repository - REPO_DEPENDS_ON_REPO -> Repository
+                    // todo mergeRepoDependsOnRepo mergePackageDependsOnPackage 这两种关系有待商榷
+/*                    // Repository - REPO_DEPENDS_ON_REPO -> Repository
                     int resRepoRepo = githubMapper.mergeRepoDependsOnRepo(repository, dependencyNode);
                     // merge了dst_repo之后，查询dst_repo的依赖，以便
                     // Package - PACKAGE_DEPENDS_ON_PACKAGE -> Package
-                    int resPackageDependsOnPackage = githubMapper.mergePackageDependsOnPackage(dependencyNode);
+                    int resPackageDependsOnPackage = githubMapper.mergePackageDependsOnPackage(dependencyNode);*/
                 }
             }
         }
@@ -171,27 +279,5 @@ public class GithubServiceImpl implements GithubService {
         return 1;
     }
 
-    @Override
-    public String transCoOccurrenceNetworkNoRequirements() {
-        return githubMapper.transCoOccurrenceNetworkNoRequirements();
-    }
 
-    @Override
-    public int transCoOccurrenceNetwork() {
-        return 1;
-    }
-
-    @Override
-    public int updateTfIdf(String ownerWithName) throws DAOException {
-        // 查询repo总数
-        int repoTotalCount = 0;
-        repoTotalCount = githubMapper.countRepoTotalCount();
-        if (repoTotalCount < 0) {
-            return 0;
-        }
-        // 查询指定repo所有的path
-        List<String> underPaths = githubMapper.listUnderPaths(ownerWithName);
-
-        return 1;
-    }
 }

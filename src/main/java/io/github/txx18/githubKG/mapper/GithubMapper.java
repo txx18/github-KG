@@ -4,6 +4,7 @@ import cn.hutool.json.JSONObject;
 import io.github.txx18.githubKG.exception.DAOException;
 
 import java.util.List;
+import java.util.Map;
 
 public interface GithubMapper {
 
@@ -23,9 +24,25 @@ public interface GithubMapper {
 
     int mergePackageDependsOnPackage(JSONObject dependencyNode) throws DAOException;
 
-    String transCoOccurrenceNetworkNoRequirements();
+    List<String> matchRepoDependsOnPackages(String nameWithOwner) throws DAOException;
 
-    int countRepoTotalCount() throws DAOException;
+    String refactorPackageCoOccur(String nameWithOwner) throws DAOException;
 
-    List<String> listUnderPaths(String ownerWithName) throws DAOException;
+    List<String> recommendPackages(List<String> dependencyNameList, List<Map<String, Object>> packageMapList, int pageNum, int pageSize) throws DAOException;
+
+    String updatePackageIDF(String nameWithManager) throws DAOException;
+
+    List<Map<String, Object>> recommendPackagesExperimentICF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
+
+    String updateRepoIDF(String nameWithOwner) throws DAOException;
+
+    String mergeRepoDependsOnPackage(String nameWithOwner, String nameWithManager, String requirements) throws DAOException;
+
+    String deleteRepoDependsOnPackage(String nameWithOwner, String nameWithManager) throws DAOException;
+
+    String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException;
+
+    List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN);
+
+    List<Map<String, Object>> recommendPackagesExperimentPopular(int topN) throws DAOException;
 }

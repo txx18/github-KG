@@ -4,12 +4,18 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GithubMapper;
-import org.neo4j.driver.*;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.neo4j.driver.Values.parameters;
 
@@ -26,6 +32,218 @@ public class GithubMapperImpl implements GithubMapper {
 
     public GithubMapperImpl(Driver driver) {
         this.driver = driver;
+    }
+
+    @Override
+    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
+        String query = "// Repo - REPO_CO_PACKAGE_REPO - Repo\n" +
+                "MATCH (package:Package {nameWithManager: $nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
+                "WITH collect(repo.nameWithOwner) AS repoNames\n" +
+                "UNWIND range(0, size(repoNames) - 1) AS i\n" +
+                "UNWIND range(i + 1, size(repoNames) - 1) AS j\n" +
+                "MATCH (repo1:Repository {nameWithOwner: repoNames[i]})\n" +
+                "MATCH (repo2:Repository {nameWithOwner: repoNames[j]})\n" +
+                "MERGE (repo1)-[co:REPO_CO_PACKAGE_REPO]-(repo2)\n" +
+                "  ON CREATE SET co.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "  ON CREATE SET co.coPackageCount = 1\n" +
+                "  ON MATCH SET co.coPackageCount = (co.coPackageCount + 1)\n" +
+                "SET co.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> tx.run(query, parameters("nameWithManager", nameWithManager)));
+        } catch (Exception e) {
+            String log = "refactorPackageCoOccur failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
+    @Override
+    public List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) {
+        return null;
+    }
+
+    @Override
+    public List<Map<String, Object>> recommendPackagesExperimentPopular(int topN) throws DAOException {
+        String query = "// 热门推荐\n" +
+                "MATCH (package:Package)<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
+                "WITH package.nameWithManager AS nameWithManager, count(repo) AS dependedDegree\n" +
+                "RETURN nameWithManager AS recommend, dependedDegree AS score\n" +
+                "  ORDER BY dependedDegree DESC\n" +
+                "  LIMIT $topN";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<Map<String, Object>> res = new ArrayList<>();
+                Result result = tx.run(query, parameters("topN", topN));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    Map<String, Object> resultMap = new HashMap<>();
+                    resultMap.put("nameWithManager", record.get("recommend").asString());
+                    resultMap.put("score", record.get("score").asDouble());
+                    res.add(resultMap);
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "recommendPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> recommendPackagesExperimentICF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException {
+        String query1 = "// ICF：针对一个package_list做推荐\n" +
+                "// 用户画像中有多个package_i，每个package_i都可能和别的package_j同现，要针对推荐出来的每个package_j全部汇总\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurrenceCount * package_i.dependedIDF\n" +
+                "* package_j.dependedIDF) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String query2 = "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       map.dependedTF * sum(co.coOccurrenceCount / (sqrt(package_i.dependedDegree * package_j.dependedDegree))) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<Map<String, Object>> res = new ArrayList<>();
+                Result result = tx.run(query2, parameters("dependencyMapList", dependencyMapList, "dependencyNameList"
+                        , dependencyNameList, "topN", topN));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    Map<String, Object> resultMap = new HashMap<>();
+                    resultMap.put("nameWithManager", record.get("recommend").asString());
+                    resultMap.put("score", record.get("score").asDouble());
+                    res.add(resultMap);
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "recommendPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+
+    @Override
+    public List<String> recommendPackages(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int pageNum, int pageSize) throws DAOException {
+        String query = "// 针对一个package_list做推荐\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurrenceCount * package_j.dependedIDF) AS\n" +
+                "score\n" +
+                "  ORDER BY score DESC\n" +
+                "  SKIP $pageNum\n" +
+                "  LIMIT $pageSize";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<String> res = new ArrayList<>();
+                Result result = tx.run(query, parameters("dependencyMapList", dependencyMapList, "dependencyNameList", dependencyNameList, "pageNum",
+                        pageNum, "pageSize", pageSize));
+                while (result.hasNext()) {
+                    res.add(result.next().get("recommend").asString());
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "recommendPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+    @Override
+    public String updateRepoIDF(String nameWithOwner) throws DAOException {
+        String query = "// 更新repo的度数和idf值，且针对有依赖的（否则应该使用OPTIONAL MATCH）\n" +
+                "MATCH (be_depended_package:Package)\n" +
+                "  WHERE exists((be_depended_package)<-[:REPO_DEPENDS_ON_PACKAGE]-(:Repository))\n" +
+                "WITH count(be_depended_package) AS be_depended_package_count\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})-[depend:REPO_DEPENDS_ON_PACKAGE]->(package:Package)\n" +
+                "WITH count(package) AS degree, repo, be_depended_package_count\n" +
+                "SET repo.dependDegree = degree\n" +
+                "SET repo.dependIDF = log(be_depended_package_count * 1.0 / (1 + degree))";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> tx.run(query, parameters("nameWithOwner", nameWithOwner)));
+        } catch (Exception e) {
+            String log = "updatePackageIDF failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
+
+    @Override
+    public String updatePackageIDF(String nameWithManager) throws DAOException {
+        String query = "// 更新package的度数和idf值，且针对有被依赖的（否则应该使用OPTIONAL MATCH）\n" +
+                "MATCH (has_dependency_repo:Repository)\n" +
+                "  WHERE exists((has_dependency_repo)-[:REPO_DEPENDS_ON_PACKAGE]->(:Package))\n" +
+                "WITH count(has_dependency_repo) AS has_dependency_repo_count\n" +
+                "MATCH (package:Package {nameWithManager: $nameWithManager})<-[depend:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
+                "WITH count(repo) AS degree, package, has_dependency_repo_count\n" +
+                "SET package.dependedDegree = degree\n" +
+                "SET package.dependedIDF = log(has_dependency_repo_count * 1.0 / (1 + degree))";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> tx.run(query, parameters("nameWithManager", nameWithManager)));
+        } catch (Exception e) {
+            String log = "updatePackageIDF failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
+
+    @Override
+    public String refactorPackageCoOccur(String nameWithOwner) throws DAOException {
+        String query = "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})-[:REPO_DEPENDS_ON_PACKAGE]->(pack:Package)\n" +
+                "WITH collect(pack.nameWithManager) AS packageNames\n" +
+                "UNWIND range(0, size(packageNames) - 1) AS i\n" +
+                "UNWIND range(i + 1, size(packageNames) - 1)  AS  j\n" +
+                "MATCH (pack1:Package {nameWithManager: packageNames[i]})\n" +
+                "MATCH (pack2:Package {nameWithManager: packageNames[j]})\n" +
+                "MERGE (pack1)-[co1:PACKAGE_CO_OCCUR_PACKAGE]-(pack2) // 注意这里不能带箭头\n" +
+                "  ON CREATE SET co1.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "  ON CREATE SET co1.coOccurrenceCount = 1\n" +
+                "  ON MATCH SET co1.coOccurrenceCount = (co1.coOccurrenceCount + 1)\n" +
+                "SET co1.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> tx.run(query, parameters("nameWithOwner", nameWithOwner)));
+        } catch (Exception e) {
+            String log = "refactorPackageCoOccur failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
+    @Override
+    public List<String> matchRepoDependsOnPackages(String nameWithOwner) throws DAOException {
+        String query = "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})-[r:REPO_DEPENDS_ON_PACKAGE]->" +
+                "(package:Package)\n" +
+                "RETURN package.nameWithManager AS nameWithManager";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<String> res = new ArrayList<>();
+                Result result = tx.run(query, parameters("nameWithOwner", nameWithOwner));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    res.add(record.get("nameWithManager").asString());
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "matchRepoDependsOnPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
     }
 
 
@@ -98,7 +316,7 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.getOrDefault("nameWithOwner", ""),
+                        "nameWithOwner", ((String) repository.getOrDefault("nameWithOwner", "")).replaceAll("\\s*", ""),
                         "assignableUserTotalCount", ((JSONObject) repository.getOrDefault("assignableUsers",
                                 JSONUtil.createObj())).getOrDefault("totalCount", -1),
                         "commitCommentTotalCount", ((JSONObject) repository.getOrDefault("commitComments",
@@ -198,8 +416,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.get("nameWithOwner"),
-                        "login", ((JSONObject) repository.get("owner")).get("login")
+                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
+                        "login", ((String) ((JSONObject) repository.get("owner")).get("login")).replaceAll("\\s*", "")
                 ));
                 return 1;
             });
@@ -224,8 +442,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.get("nameWithOwner"),
-                        "topicName", ((JSONObject) topicNode.get("topic")).get("name")
+                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
+                        "topicName", ((String) ((JSONObject) topicNode.get("topic")).get("name")).trim()
                 ));
                 return 1;
             });
@@ -251,8 +469,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.get("nameWithOwner"),
-                        "languageName", languageNode.get("name"),
+                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
+                        "languageName", ((String) languageNode.get("name")).trim(),
                         "size", languageEdge.getOrDefault("size", -1)
                 ));
                 return 1;
@@ -264,6 +482,55 @@ public class GithubMapperImpl implements GithubMapper {
         }
         return 1;
     }
+
+    @Override
+    public String mergeRepoDependsOnPackage(String nameWithOwner, String nameWithManager, String requirements) throws DAOException {
+        String query = "// 创建依赖关系 Repository - REPO_DEPENDS_ON_PACKAGE -> Package\n" +
+                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "MATCH (package:Package {nameWithManager: $nameWithManager})\n" +
+                "MERGE (repo)-[depends_package:REPO_DEPENDS_ON_PACKAGE]->(package)\n" +
+                "  ON CREATE SET depends_package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET depends_package.requirements = $requirements";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", nameWithOwner,
+                        "nameWithManager", nameWithManager,
+                        "requirements", requirements
+                ));
+                return "ok";
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoPackage failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
+    @Override
+    public String deleteRepoDependsOnPackage(String nameWithOwner, String nameWithManager) throws DAOException {
+        String query = "// 删除依赖关系 Repository - REPO_DEPENDS_ON_PACKAGE -> Package\n" +
+                "MATCH(:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "       -[r:REPO_DEPENDS_ON_PACKAGE]-(:Package {nameWithManager: $nameWithManager})\n" +
+                "DELETE r";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "nameWithOwner", nameWithOwner,
+                        "nameWithManager", nameWithManager
+                ));
+                return "ok";
+            });
+        } catch (Exception e) {
+            String log = "mergeRepoPackage failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
+
 
     @Override
     public int mergeRepoDependsOnPackage(JSONObject repository, JSONObject dependencyGraphManifestNode, JSONObject dependencyNode) throws DAOException {
@@ -286,8 +553,9 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.get("nameWithOwner"),
-                        "packageNameWithManager", dependencyNode.get("packageManager") + "/" + dependencyNode.get("packageName"),
+                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
+                        "packageNameWithManager", ((String) (dependencyNode.get("packageManager") + "/" + dependencyNode.get(
+                                "packageName"))).replaceAll("\\s*", ""),
                         "packageName", dependencyNode.get("packageName"),
                         "packageManager", dependencyNode.get("packageManager"),
                         "blobPath", dependencyGraphManifestNode.getOrDefault("blobPath", ""),
@@ -320,8 +588,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", repository.get("nameWithOwner"),
-                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
+                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
+                        "dstRepoNameWithOwner", ((String) ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner")).replaceAll("\\s*", ""),
                         "requirements", dependencyNode.getOrDefault("requirements", "")
                 ));
                 return 1;
@@ -337,16 +605,20 @@ public class GithubMapperImpl implements GithubMapper {
     @Override
     public int mergeRepoDevelopsPackage(JSONObject dependencyNode) throws DAOException {
         String query = "// Repository - REPO_DEVELOPS_PACKAGE -> Package\n" +
-                "MATCH (dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})\n" +
                 "MATCH (package:Package {nameWithManager: $packageNameWithManager})\n" +
-                "MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)\n" +
+                "MERGE (dev_repo:Repository {nameWithOwner: $devRepoNameWithOwner})\n" +
+                "  ON CREATE SET dev_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET dev_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (dev_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)\n" +
                 "  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner"),
-                        "packageNameWithManager", dependencyNode.get("packageManager") + "/" + dependencyNode.get("packageName")
+                        "devRepoNameWithOwner", ((String) ((JSONObject) dependencyNode.get("repository")).get(
+                                "nameWithOwner")).replaceAll("\\s*", ""),
+                        "packageNameWithManager", ((String) (dependencyNode.get("packageManager") + "/" + dependencyNode.get(
+                                "packageName"))).replaceAll("\\s*", "")
                 ));
                 return 1;
             });
@@ -372,7 +644,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "dstRepoNameWithOwner", ((JSONObject) dependencyNode.get("repository")).get("nameWithOwner")
+                        "dstRepoNameWithOwner", ((String) ((JSONObject) dependencyNode.get("repository")).get(
+                                "nameWithOwner")).replaceAll("\\s*", "")
                 ));
                 return 1;
             });
@@ -384,131 +657,4 @@ public class GithubMapperImpl implements GithubMapper {
         return 1;
     }
 
-    @Override
-    public String transCoOccurrenceNetworkNoRequirements() {
-        try (Session session = driver.session()) {
-            int repoCount = 0;
-            // 匿名内部类写法
-            List<Record> repoNameWithOwners = session.readTransaction(new TransactionWork<List<Record>>() {
-                @Override
-                public List<Record> execute(Transaction tx) {
-                    return matchHasDependenciesRepos(tx);
-                }
-            });
-            // 遍历Repo
-            for (final Record nameWithOwner : repoNameWithOwners) {
-                // 遍历Package
-                // lambda标准写法
-                List<Record> nameWithManagers = session.readTransaction((tx) -> {
-                    return matchPackagesByRepo(tx, nameWithOwner);
-                });
-                // 握手问题，只需遍历到倒数第二个小朋友
-                for (int i = 0; i < nameWithManagers.size() - 1; i++) {
-                    int packageCount = 0;
-                    Record nameWithManager1 = nameWithManagers.get(i);
-                    for (int j = i + 1; j < nameWithManagers.size(); j++) {
-                        Record nameWithManager2 = nameWithManagers.get(j);
-                        packageCount += session.writeTransaction(tx -> mergePackageCoOccurrencePackage(tx,
-                                nameWithManager1, nameWithManager2)); // lambda写法
-                    }
-                    System.out.println("package1: " + nameWithManager1 + "index: " + packageCount);
-                }
-                repoCount++;
-                System.out.println("repo: " + nameWithOwner + "index: " + repoCount);
-            }
-            return "ok";
-        }
-    }
-
-    private Integer mergePackageCoOccurrencePackage(Transaction tx, Record nameWithManager1, Record nameWithManager2) {
-        String query = "// Package - PACKAGE_CO_OCCURRENCE_PACKAGE - Package\n" +
-                "// 第一次同现关系ON CREATE SET, 非第一次同现关系 ON MATCH SET\n" +
-                "MATCH (pack1:Package {nameWithManager: $nameWithManager1})\n" +
-                "MATCH (pack2:Package {nameWithManager: $nameWithManager2})\n" +
-                "MERGE (pack1)-[co1:PACKAGE_CO_OCCURRENCE_PACKAGE]->(pack2)\n" +
-                "  ON CREATE SET co1.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  ON CREATE SET co1.coOccurrenceCount = 1\n" +
-                "  ON MATCH SET co1.coOccurrenceCount = (co1.coOccurrenceCount + 1)\n" +
-                "SET co1.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (pack2)-[co2:PACKAGE_CO_OCCURRENCE_PACKAGE]->(pack1)\n" +
-                "  ON CREATE SET co2.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  ON CREATE SET co2.coOccurrenceCount = 1\n" +
-                "  ON MATCH SET co2.coOccurrenceCount = (co2.coOccurrenceCount + 1)\n" +
-                "SET co2.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
-        tx.run(query, parameters(
-                "nameWithManager1", nameWithManager1.get("nameWithManager").asString(),
-                "nameWithManager2", nameWithManager2.get("nameWithManager").asString()
-        ));
-        return 1;
-    }
-
-    private List<Record> matchPackagesByRepo(Transaction tx, Record nameWithOwner) {
-        String query = "// 遍历一个Repo的Package\n" +
-                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})-[:REPO_DEPENDS_ON_PACKAGE]->(pack:Package)\n" +
-                "RETURN pack.nameWithManager as nameWithManager\n" +
-                "  ORDER BY nameWithManager";
-        return tx.run(query, parameters("nameWithOwner", nameWithOwner.get("nameWithOwner").asString())).list();
-    }
-
-    private List<Record> matchHasDependenciesRepos(Transaction tx) {
-        String query = "MATCH (repo:Repository)\n" +
-                "WHERE EXISTS {\n" +
-                "  MATCH (repo)-[:REPO_DEPENDS_ON_PACKAGE]->(pack:Package)\n" +
-                "}\n" +
-                "//RETURN COUNT(repo.nameWithOwner)\n" +
-                "RETURN repo.nameWithOwner as nameWithOwner\n" +
-                "  ORDER BY nameWithOwner";
-        return tx.run(query).list();
-    }
-
-    @Override
-    public int countRepoTotalCount() throws DAOException {
-        String query = "MATCH (total_repo:Repo)\n" +
-                "RETURN count(total_repo) AS total_repo_count";
-        Record record = null;
-        try (Session session = driver.session()) {
-            Result result = session.run(query);
-            while (result.hasNext()) {
-                record = result.next();
-            }
-            if (record == null) {
-                return -1;
-            }
-            return record.get("total_repo_count").asInt();
-        } catch (Exception e) {
-            String log = "failed";
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
-    }
-
-    /**
-     * FIXME 这查询当时看的哪儿？？就用Java Driver的吧。。
-     *
-     * @param ownerWithName
-     * @return
-     * @throws DAOException
-     */
-    @Override
-    public List<String> listUnderPaths(String ownerWithName) throws DAOException {
-        String query = "MATCH (repo:Repo {nameWithOwner: 'tensorflow/tensorflow'})-[under:UNDER]->(topic:Topic)\n" +
-                "RETURN collect(under) AS under_list, collect(topic) AS topic_list";
-        Record record = null;
-        try (Session session = driver.session(SessionConfig.builder().withDefaultAccessMode(AccessMode.READ).build())) {
-            List<String> underList = session.run(query).list(r -> r.get("under_list").asString());
-/*            while (result.hasNext()) {
-                record = result.next();
-            }
-            if (record == null) {
-                return null;
-            }
-            List<Object> under_list = record.get("under_list").asList();
-            List<Object> topic_list = record.get("topic_list").asList();*/
-            return underList;
-        } catch (Exception e) {
-            String log = "failed";
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
-    }
 }

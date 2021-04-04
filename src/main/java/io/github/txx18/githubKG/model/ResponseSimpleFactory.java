@@ -40,6 +40,10 @@ public class ResponseSimpleFactory {
         return new ResponseSimpleFactory(status, msg, data);
     }
 
+    public static ResponseSimpleFactory createDataSuccessResponse(Object data){
+        return new ResponseSimpleFactory("success", "ok", data);
+    }
+
     public static ResponseSimpleFactory createSimpleResponse(String cmd) {
         switch (cmd) {
             case "ok":

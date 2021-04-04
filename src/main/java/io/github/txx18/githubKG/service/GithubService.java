@@ -1,14 +1,29 @@
 package io.github.txx18.githubKG.service;
 
 import io.github.txx18.githubKG.exception.DAOException;
+import io.github.txx18.githubKG.model.DependencyPackage;
+import io.github.txx18.githubKG.model.Page;
+
+import java.util.List;
+import java.util.Map;
 
 public interface GithubService {
 
     int insertRepoByJsonFile(String filePath) throws Exception;
 
-    String transCoOccurrenceNetworkNoRequirements();
+    String refactorPackageCoOccur(String nameWithOwner) throws DAOException;
 
-    int transCoOccurrenceNetwork();
+    Page<DependencyPackage> recommendPackages(String jsonStr, int pageNum, int pageSize) throws DAOException;
 
-    int updateTfIdf(String ownerWithName) throws DAOException;
+    String updatePackageIDF(String nameWithManager) throws DAOException;
+
+    List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String recoMethod, int topN) throws Exception;
+
+    String updateRepoIDF(String nameWithOwner) throws DAOException;
+
+    String createRepoDependsOnPackage(String nameWithOwner, String nameWithManager, String requirements) throws DAOException;
+
+    String deleteRepoDependsOnPackage(String nameWithOwner, String nameWithManager) throws DAOException;
+
+    String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException;
 }

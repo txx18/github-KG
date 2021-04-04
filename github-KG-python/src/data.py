@@ -1,21 +1,59 @@
-import json
-import os
+import random
 from collections import OrderedDict
 
-import jsonpath
+from statistic import *
+from util.FileUtils import *
 
-from util.FileUtils import read_json_file
+
+def rename_file_name_not_match_nameWithOwner(repo_dir):
+    target_file_tuple = get_file_name_not_match_nameWithOwner(repo_dir)
+    for item in target_file_tuple:
+        os.rename(os.path.join(repo_dir, item[0]), os.path.join(repo_dir, item[1]))
+    print('finish rename!')
 
 
-class Paperswithcode(object):
-    def get_arxivId_paperTitle_dic(self):
-        json = read_json_file(
-            r"C:\Disk_Dev\Repository\github-KG\github-KG-python\tx_data\resource\paperswithcode\papers-with-abstracts.json")
-        res = {}
-        for item in json:
-            res[item["arxiv_id"]] = item["title"]
-        return res
+def split_data_list(raw_lst, M, k, seed):
+    '''
+    :param raw_lst: 要想保证每次输出都是相同，输入要自己保证是固定的顺序；此函数只保证划分list，如果要去重要自己输入list(set)
+    :param M:
+    :param k:
+    :param seed:
+    :return: 不转为set，
+    '''
 
+    N = len(raw_lst)
+    index_lst = [i for i in range(0, N)]
+    index_dic = defaultdict(list)
+    offset = int(N / M)
+    for i in range(0, M):
+        random.seed(seed)
+        # 从lst中采样offset个元素
+        index_dic['set_' + str(i)] = random.sample(index_lst, offset)
+        # for repo in dic['set_' + str(i)]:
+        #     lst.remove(repo)
+        index_lst = list(set(index_lst) - set(index_dic['set_' + str(i)]))
+    # index_lst还有剩余（余数），依次加入前几个set_
+    for i in range(len(index_lst)):
+        index_dic['set_' + str(i)].append(index_lst[i])
+    item_dic = defaultdict(list)
+    for i in range(0, M):
+        for index in index_dic['set_' + str(i)]:
+            item_dic['set_' + str(i)].append(raw_lst[index])
+    train_list = []
+    # 选其中一份作为测试，其余训练模型
+    for key, val in item_dic.items():
+        if key != 'set_' + str(k):
+            train_list.extend(val)
+    test_list = item_dic.get('set_' + str(k))
+    return train_list, test_list
+
+
+def move_needless_repo(src_dir, dup_dir, no_dependency_dir, target_file_list, min_dependency_count):
+    dup_repo_set, no_dependency_set = get_needless_repo_set(src_dir, target_file_list, min_dependency_count)
+    for repo in dup_repo_set:
+        move_file(src_dir, dup_dir, repo)
+    for repo in no_dependency_set:
+        move_file(src_dir, no_dependency_dir, repo)
 
 
 def repo_property():
