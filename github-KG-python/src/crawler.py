@@ -271,6 +271,7 @@ class GithubAPIv4(object):
         print("get_relate_topics finished")
 
     def get_repo(self, target, raw_nwo, out_dir_path, no_dup_repo_set):
+        pattern = re.compile(r'\s+')
         print('\n')
         owner, repoName = raw_nwo.split("/")
         query = queries.repos_query % (owner, repoName)
@@ -343,7 +344,7 @@ class GithubAPIv4(object):
                 # TODO 内部有4个字段可能有多页dependencyGraphManifests（嵌套dependencies），languages, repositoryTopics，但是一般都不会超过100个，所以这里统统不考虑了
                 # 写入文件，文件名为 owner + "-$-" + repoName + ".json"
                 # todo 统一以数据里的 nameWithOwner 字段为准，如果已经爬过这个nwo了就下一个，这样也就顺便解决了 同nwo不同文件名的问题
-                real_nwo = response_json['nameWithOwner']
+                real_nwo = re.sub(pattern, '', response_json['nameWithOwner'])
                 if real_nwo in no_dup_repo_set:
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude/dup_repo.txt", raw_nwo)
                     break

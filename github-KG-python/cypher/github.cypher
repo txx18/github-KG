@@ -1,6 +1,14 @@
-// ICF：针对一个package_list做推荐
-// 用户画像中有多个package_i，每个package_i都可能和别的package_j同现，要针对推荐出来的每个package_j全部汇总
-// tf-idf
+// Graph
+// Graph_cosine_P_R
+UNWIND $dependencyMapList AS map
+MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum((1 / (sqrt(package_i.dependedDegree * package_j.dependedDegree * repo_j.dependDegree)))) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// Graph_tfidf_P
 UNWIND $dependencyMapList AS map
 MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
@@ -8,17 +16,79 @@ RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurre
 * package_j.dependedIDF) AS score
   ORDER BY score DESC
   LIMIT $topN
-// sqrt(degree)
+// Graph_cosine_P_tfidf_P
 UNWIND $dependencyMapList AS map
 MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
 RETURN package_j.nameWithManager AS recommend,
-       map.dependedTF * sum(co.coOccurrenceCount / (sqrt(package_i.dependedDegree * package_j.dependedDegree))) AS score
+       sum(co.coOccurrenceCount * package_i.dependedIDF * package_j.dependedIDF / sqrt(package_i.
+         dependedDegree * package_j.dependedDegree)) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// Graph_cosine_P_tfidf_P_R
+UNWIND $dependencyMapList AS map
+MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.
+         dependedDegree * package_j.dependedDegree))) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// Graph_cosine_P_R_tfidf_P_R
+UNWIND $dependencyMapList AS map
+MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.
+         dependedDegree * package_j.dependedDegree * repo_j.dependDegree))) AS score
   ORDER BY score DESC
   LIMIT $topN
 
-// 热门推荐
+
+// UCF
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+        -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1 / (sqrt(size($dependencyNameList) * repo_j.dependDegree))) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// UCF_IIF
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+        -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum(1 * (1 / log(1 + package_i.dependedDegree)) / (sqrt(size($dependencyNameList) * repo_j.dependDegree))) AS
+       score
+  ORDER BY score DESC
+  LIMIT $topN
+
+// ICF
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum(co.coOccurrenceCount / sqrt(package_i.dependedDegree * package_j.dependedDegree)) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// ICF_IUF
+UNWIND $dependencyMapList AS map
+MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum((1 * (1 / log(1 + repo_j.dependDegree)) / sqrt(package_i.dependedDegree * package_j.dependedDegree)))
+       AS score
+  ORDER BY score DESC
+  LIMIT $topN
+
+
+// Popular 热门推荐
 MATCH (package:Package)<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)
+  WHERE NOT package.nameWithManager IN $dependencyNameList
 WITH package.nameWithManager AS nameWithManager, count(repo) AS dependedDegree
 RETURN nameWithManager AS recommend, dependedDegree AS score
   ORDER BY dependedDegree DESC
@@ -67,7 +137,6 @@ RETURN pack.nameWithManager AS nameWithManager
 // 一个Packge可能被上万个repo依赖，握手握不动。。
 MATCH (package:Package {nameWithManager: $nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)
 WITH package, count(repo) AS dependedDegree
-
 WITH collect(repo.nameWithOwner) AS repoNames
 UNWIND range(0, size(repoNames) - 1) AS i
 UNWIND range(i + 1, size(repoNames) - 1) AS j

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +28,24 @@ public class GithubController {
         this.githubService = githubService;
     }
 
+    @RequestMapping(path = "/exp/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseSimpleFactory recommendPackagesExperiment(@RequestParam("repo_portrait_dic") String repoPortraitJsonStr,
+                                                             @RequestParam("reco_method") String recoMethod,
+                                                             @RequestParam("topN") int topN) {
+        List<Map<String, Object>> recoRecordList;
+        try {
+            recoRecordList = githubService.recommendPackagesExperiment(repoPortraitJsonStr, recoMethod, topN);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseSimpleFactory.createResponse(e.getMessage());
+        }
+/*        List<String> recoPackageList = new ArrayList<>();
+        for (Map<String, Object> record : recoRecordList) {
+            recoPackageList.add(((String) record.get("nameWithManager")));
+        }*/
+        return ResponseSimpleFactory.createDataSuccessResponse(recoRecordList);
+    }
+
     @RequestMapping(path = "/refactor/repo_co_package_repo", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory refactorRepoCoPackageRepo(@RequestParam("nameWithManager") String nameWithManager) {
         String res;
@@ -44,23 +61,6 @@ public class GithubController {
         return ResponseSimpleFactory.createSimpleResponse("ok");
     }
 
-    @RequestMapping(path = "/exp/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseSimpleFactory recommendPackagesExperiment(@RequestParam("repo_portrait_dic") String repoPortraitJsonStr,
-                                                             @RequestParam("reco_method") String recoMethod,
-                                                             @RequestParam("topN") int topN) {
-        List<Map<String, Object>> recoRecord;
-        try {
-            recoRecord = githubService.recommendPackagesExperiment(repoPortraitJsonStr, recoMethod, topN);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseSimpleFactory.createResponse(e.getMessage());
-        }
-        List<String> recoPackageList = new ArrayList<>();
-        for (Map<String, Object> record : recoRecord) {
-            recoPackageList.add(((String) record.get("nameWithManager")));
-        }
-        return ResponseSimpleFactory.createDataSuccessResponse(recoPackageList);
-    }
 
     @RequestMapping(path = "/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory recommendPackages(@RequestParam("json_str") String jsonStr,

@@ -58,7 +58,10 @@ public class GithubServiceImpl implements GithubService {
                 res = githubMapper.recommendPackagesExperimentUCF(dependencyNameList, dependencyMapList, topN);
                 return res;
             case "Popular":
-                res = githubMapper.recommendPackagesExperimentPopular(topN);
+                res = githubMapper.recommendPackagesExperimentPopular(dependencyNameList, topN);
+                return res;
+            case "Graph":
+                res = githubMapper.recommendPackagesExperimentGraph(dependencyNameList, dependencyMapList, topN);
                 return res;
             default:
                 throw new Exception("没有选择推荐方法！");

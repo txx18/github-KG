@@ -35,46 +35,100 @@ public class GithubMapperImpl implements GithubMapper {
     }
 
     @Override
-    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
-        String query = "// Repo - REPO_CO_PACKAGE_REPO - Repo\n" +
-                "MATCH (package:Package {nameWithManager: $nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
-                "WITH collect(repo.nameWithOwner) AS repoNames\n" +
-                "UNWIND range(0, size(repoNames) - 1) AS i\n" +
-                "UNWIND range(i + 1, size(repoNames) - 1) AS j\n" +
-                "MATCH (repo1:Repository {nameWithOwner: repoNames[i]})\n" +
-                "MATCH (repo2:Repository {nameWithOwner: repoNames[j]})\n" +
-                "MERGE (repo1)-[co:REPO_CO_PACKAGE_REPO]-(repo2)\n" +
-                "  ON CREATE SET co.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "  ON CREATE SET co.coPackageCount = 1\n" +
-                "  ON MATCH SET co.coPackageCount = (co.coPackageCount + 1)\n" +
-                "SET co.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
-        try (Session session = driver.session()) {
-            session.writeTransaction(tx -> tx.run(query, parameters("nameWithManager", nameWithManager)));
-        } catch (Exception e) {
-            String log = "refactorPackageCoOccur failed!";
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
-        return "ok";
-    }
-
-    @Override
-    public List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) {
-        return null;
-    }
-
-    @Override
-    public List<Map<String, Object>> recommendPackagesExperimentPopular(int topN) throws DAOException {
-        String query = "// 热门推荐\n" +
-                "MATCH (package:Package)<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
-                "WITH package.nameWithManager AS nameWithManager, count(repo) AS dependedDegree\n" +
-                "RETURN nameWithManager AS recommend, dependedDegree AS score\n" +
-                "  ORDER BY dependedDegree DESC\n" +
+    public List<Map<String, Object>> recommendPackagesExperimentGraph(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException {
+        String Graph_cosine_P_R = "UNWIND $dependencyMapList AS map\n" +
+                "MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum((1 / (sqrt(package_i.dependedDegree * package_j.dependedDegree * repo_j.dependDegree)))) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String Graph_tfidf_P = "// ICF：针对一个package_list做推荐\n" +
+                "// 用户画像中有多个package_i，每个package_i都可能和别的package_j同现，要针对推荐出来的每个package_j全部汇总\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend, sum(co.coOccurrenceCount * package_i.dependedIDF\n" +
+                "* package_j.dependedIDF) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String Graph_cosine_P_tfidf_P = "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum(co.coOccurrenceCount * package_i.dependedIDF\n" +
+                "       * package_j.dependedIDF / sqrt(package_i.dependedDegree * package_j.dependedDegree)) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String Graph_cosine_P_tfidf_P_R = "// 两跳查询写法，还是需要两个入度\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.\n" +
+                "         dependedDegree * package_j.dependedDegree))) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String Graph_cosine_P_R_tfidf_P_R = "// Graph_cosine_P_R_tfidf_P_R\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.\n" +
+                "         dependedDegree * package_j.dependedDegree * repo_j.dependDegree))) AS score\n" +
+                "  ORDER BY score DESC\n" +
                 "  LIMIT $topN";
         try (Session session = driver.session()) {
             return session.readTransaction(tx -> {
                 List<Map<String, Object>> res = new ArrayList<>();
-                Result result = tx.run(query, parameters("topN", topN));
+                Result result = tx.run(Graph_cosine_P_R_tfidf_P_R, parameters("dependencyMapList", dependencyMapList, "dependencyNameList"
+                        , dependencyNameList, "topN", topN));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    Map<String, Object> resultMap = new HashMap<>();
+                    resultMap.put("nameWithManager", record.get("recommend").asString());
+                    resultMap.put("score", record.get("score").asDouble());
+                    res.add(resultMap);
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "recommendPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+
+    @Override
+    public List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException {
+        String cosine = "// UCF：针对一个package_list做推荐\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "        -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend, sum(1 / (sqrt(size($dependencyNameList) * repo_j" +
+                ".dependDegree))) AS score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        String IIF = "// IIF\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "        -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
+                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum(1 * (1 / log(1 + package_i.dependedDegree)) / (sqrt(size($dependencyNameList) * repo_j.dependDegree))) AS\n" +
+                "       score\n" +
+                "  ORDER BY score DESC\n" +
+                "  LIMIT $topN";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<Map<String, Object>> res = new ArrayList<>();
+                Result result = tx.run(cosine, parameters("dependencyMapList", dependencyMapList, "dependencyNameList"
+                        , dependencyNameList, "topN", topN));
                 while (result.hasNext()) {
                     Record record = result.next();
                     Map<String, Object> resultMap = new HashMap<>();
@@ -92,27 +146,59 @@ public class GithubMapperImpl implements GithubMapper {
     }
 
     @Override
+    public List<Map<String, Object>> recommendPackagesExperimentPopular(List<String> dependencyNameList, int topN) throws DAOException {
+        String query = "// Popular 热门推荐\n" +
+                "MATCH (package:Package)<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
+                "  WHERE NOT package.nameWithManager IN $dependencyNameList\n" +
+                "WITH package.nameWithManager AS nameWithManager, count(repo) AS dependedDegree\n" +
+                "RETURN nameWithManager AS recommend, dependedDegree AS score\n" +
+                "  ORDER BY dependedDegree DESC\n" +
+                "  LIMIT $topN";
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> {
+                List<Map<String, Object>> res = new ArrayList<>();
+                Result result = tx.run(query, parameters("dependencyNameList", dependencyNameList, "topN", topN));
+                while (result.hasNext()) {
+                    Record record = result.next();
+                    Map<String, Object> resultMap = new HashMap<>();
+                    resultMap.put("nameWithManager", record.get("recommend").asString());
+                    resultMap.put("score", record.get("score").asDouble());
+                    res.add(resultMap);
+                }
+                return res;
+            });
+        } catch (Exception e) {
+            String log = "recommendPackages failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+    }
+
+
+    @Override
     public List<Map<String, Object>> recommendPackagesExperimentICF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException {
-        String query1 = "// ICF：针对一个package_list做推荐\n" +
-                "// 用户画像中有多个package_i，每个package_i都可能和别的package_j同现，要针对推荐出来的每个package_j全部汇总\n" +
+        String cosine = "// cosine\n" +
                 "UNWIND $dependencyMapList AS map\n" +
                 "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
                 "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
-                "RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurrenceCount * package_i.dependedIDF\n" +
-                "* package_j.dependedIDF) AS score\n" +
+                "RETURN package_j.nameWithManager AS recommend,\n" +
+                "       sum(co.coOccurrenceCount / sqrt(package_i.dependedDegree * package_j.dependedDegree)) AS score\n" +
                 "  ORDER BY score DESC\n" +
                 "  LIMIT $topN";
-        String query2 = "UNWIND $dependencyMapList AS map\n" +
-                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
+        String item_IUF = "// Item_IUF\n" +
+                "UNWIND $dependencyMapList AS map\n" +
+                "MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)\n" +
+                "  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)\n" +
                 "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
                 "RETURN package_j.nameWithManager AS recommend,\n" +
-                "       map.dependedTF * sum(co.coOccurrenceCount / (sqrt(package_i.dependedDegree * package_j.dependedDegree))) AS score\n" +
+                "       sum((1 * (1 / log(1 + repo_j.dependDegree)) / sqrt(package_i.dependedDegree * package_j.dependedDegree)))\n" +
+                "       AS score\n" +
                 "  ORDER BY score DESC\n" +
                 "  LIMIT $topN";
         try (Session session = driver.session()) {
             return session.readTransaction(tx -> {
                 List<Map<String, Object>> res = new ArrayList<>();
-                Result result = tx.run(query2, parameters("dependencyMapList", dependencyMapList, "dependencyNameList"
+                Result result = tx.run(item_IUF, parameters("dependencyMapList", dependencyMapList, "dependencyNameList"
                         , dependencyNameList, "topN", topN));
                 while (result.hasNext()) {
                     Record record = result.next();
@@ -200,6 +286,29 @@ public class GithubMapperImpl implements GithubMapper {
         return "ok";
     }
 
+    @Override
+    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
+        String query = "// Repo - REPO_CO_PACKAGE_REPO - Repo\n" +
+                "MATCH (package:Package {nameWithManager: $nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)\n" +
+                "WITH collect(repo.nameWithOwner) AS repoNames\n" +
+                "UNWIND range(0, size(repoNames) - 1) AS i\n" +
+                "UNWIND range(i + 1, size(repoNames) - 1) AS j\n" +
+                "MATCH (repo1:Repository {nameWithOwner: repoNames[i]})\n" +
+                "MATCH (repo2:Repository {nameWithOwner: repoNames[j]})\n" +
+                "MERGE (repo1)-[co:REPO_CO_PACKAGE_REPO]-(repo2)\n" +
+                "  ON CREATE SET co.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "  ON CREATE SET co.coPackageCount = 1\n" +
+                "  ON MATCH SET co.coPackageCount = (co.coPackageCount + 1)\n" +
+                "SET co.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> tx.run(query, parameters("nameWithManager", nameWithManager)));
+        } catch (Exception e) {
+            String log = "refactorPackageCoOccur failed!";
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "ok";
+    }
 
     @Override
     public String refactorPackageCoOccur(String nameWithOwner) throws DAOException {

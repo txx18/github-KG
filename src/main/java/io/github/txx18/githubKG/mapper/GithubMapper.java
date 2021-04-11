@@ -42,7 +42,9 @@ public interface GithubMapper {
 
     String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN);
+    List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperimentPopular(int topN) throws DAOException;
+    List<Map<String, Object>> recommendPackagesExperimentPopular(List<String> dependencyNameList, int topN) throws DAOException;
+
+    List<Map<String, Object>> recommendPackagesExperimentGraph(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
 }
