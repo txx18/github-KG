@@ -1,16 +1,17 @@
 import logging
-import re
 import time
+from collections import OrderedDict
+from uuid import uuid1
 
+import pandas as pd
 import requests
 
-from data import *
-from statistic import *
 from util.FileUtils import *
+from util.utils import *
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-ch = logging.FileHandler(os.path.join(os.getcwd(), "..", "github.py.log"), mode='a', encoding=None, delay=False)
+ch = logging.FileHandler(os.path.join(os.getcwd(), "..", 'log', "github.py.log"), mode='a', encoding=None, delay=False)
 ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
@@ -24,39 +25,39 @@ def reco_packages_batch_experiment_split_relation(**kwargs):
     :return:
     """
     train_row_list, test_row_list, train_dic, test_dic = split_train_test_dic(**kwargs)
-    # 对 测试集 与 训练集 的repo交集中 每个repo做推荐
-    test_set_repos = test_dic.keys()
-    train_set_repos = sorted(train_dic.keys())
-    inter_set_repos = sorted(train_set_repos & test_set_repos)
+    total_test_repo_set = test_dic.keys()
+    # 如果是检验内容推荐器，【在推荐时】只有测试集没有训练集
+    if kwargs.get('all_testset'):
+        payload_repo_set = sorted(total_test_repo_set)
+    else:
+        total_train_repo_set = train_dic.keys()
+        total_inter_repo_set = total_train_repo_set & total_test_repo_set
+        payload_repo_set = sorted(total_inter_repo_set)
     # 推荐结果
     reco_result_dic = OrderedDict()
     # 时间指标
     start_time = time.time()
-    # 开始遍历交集中的repo进行推荐
-    for i, nameWithOwner in enumerate(inter_set_repos):  # inter_set_repos train_set_repos
+    # 开始repo进行推荐
+    for i, nameWithOwner in enumerate(payload_repo_set):
         print('-------------------------------------------------------------')
-        print("index: " + str(i + 1) + "/" + str(len(inter_set_repos)) + ", repo: " + str(nameWithOwner))
+        print("index: " + str(i + 1) + "/" + str(len(payload_repo_set)) + ", repo: " + str(nameWithOwner))
         # 找到 trainset 和 testset 中的package
         train_package_set = set(train_dic[nameWithOwner])
         test_package_set = set(test_dic[nameWithOwner])
-        # 统计依赖次数 depended_count_dic，作为TF值的依据，注意现在只包括训练集中的package，测试集是未知的
-        # depended_count_dic, train_package_depended_count = cal_dependency_count_dic(repo_dir, nameWithOwner,
-        #                                                                           train_package_set)
-        # 计算train_set中每个package的tf值，dependedTF相当于r_ui，对于隐反馈数据，可以都设为1，目前都设为1
+        # 计算 trainset 中每个package的tf值，TfIdf = packageTF * packageRepoIDF
         dependency_dic_list = []
         for package in train_package_set:
             dependency_dic = {}
             dependency_dic['nameWithManager'] = package
-            # dependency_dic['dependedTF'] = float(depended_count_dic[package] / train_package_depended_count)
-            dependency_dic['dependedTF'] = 1
+            dependency_dic['packageTf'] = 1 / len(train_package_set)
+            # dependency_dic['dependedTF'] = 1
             dependency_dic_list.append(dependency_dic)
         repo_portrait_dic = {}
         repo_portrait_dic['nameWithOwner'] = nameWithOwner
         repo_portrait_dic['dependency_dic_list'] = dependency_dic_list
         # 输入用户画像，进行推荐
         response = reco_packages_experiment(json.dumps(repo_portrait_dic),
-                                            kwargs.get('reco_method'),
-                                            kwargs.get('topN'))
+                                            json.dumps(kwargs))
         response_json = json.loads(response)
         if json.loads(response).get("status") != "success":
             print(json.loads(response))
@@ -65,10 +66,13 @@ def reco_packages_batch_experiment_split_relation(**kwargs):
         reco_package_list = []
         for record in recoRecordList:
             reco_package_list.append(record.get('nameWithManager'))
-        # 保存推荐结果
-        reco_result_dic[nameWithOwner] = reco_package_list
+        # 保存推荐结果，如果需要保存score，就保存recordList，否则只用保存topN
+        if kwargs.get('save_score'):
+            reco_result_dic[nameWithOwner] = recoRecordList
+        else:
+            reco_result_dic[nameWithOwner] = reco_package_list
         reco_package_set = set(reco_package_list)
-        # print("train_package_set: " + str(train_package_set))
+        print("train_package_set: " + str(train_package_set))
         print("test_package_set: " + str(test_package_set))
         print("recoRecordList: " + str([str(x.get('nameWithManager')) + ': ' + str(x.get('score')) for x in
                                         recoRecordList]))
@@ -84,12 +88,56 @@ def reco_packages_batch_experiment_split_relation(**kwargs):
     logger.info('\nkwargs: ' + json.dumps(kwargs, indent=4) + '\ncost_time: ' + str(cost_time))
     # 序列化结果
     to_reco_csv_file = kwargs.get('to_reco_csv_file').split('\\')[-1:][0]
-    out_dir = kwargs.get('out_dir') + '/' + os.path.join(os.path.splitext(to_reco_csv_file)[0], 'train' +
-                                                         str(kwargs.get('train_k')), 'top' + str(kwargs.get('topN')))
-    dump_file = kwargs.get('reco_method') + '.json'
+    split_dir_name = 'split_' + str(kwargs.get('split_M')) + '_test_' + "_".join(map(lambda x: str(x), kwargs.get(
+        'test_ks')))
+    out_dir = kwargs.get('out_dir') + '/' + os.path.join(os.path.splitext(to_reco_csv_file)[0], split_dir_name,
+                                                         'top' + str(kwargs.get('topN')))
+    dump_file = kwargs.get('reco_method') + '_' + str(uuid1()) + '.json'
     dump_file_path = out_dir + '/' + dump_file
     write_json_file(out_dir, dump_file_path, reco_result_dic)
     return
+
+
+def dump_model_validation_set(reco_dir, **kwargs):
+    validation_dic, validation_row_list, model_dic, model_row_list = split_model_validation_dic(**kwargs)
+    df_validation = pd.DataFrame(data=validation_row_list, columns=['nameWithOwner', 'nameWithManager'])
+    df_model = pd.DataFrame(data=model_row_list, columns=['nameWithOwner', 'nameWithManager'])
+    dump_file_validation = 'repo_has_model-package_split_' + str(kwargs.get('user_M')) + '_validation_' + "_".join(map(lambda x: str(x), kwargs.get(
+        'user_ks'))) + '_' + str(uuid1()) + '.csv'
+    dump_file_model = 'repo_has_model-package_split_' + str(kwargs.get('user_M')) + '_validation_' + "_".join(map(lambda x: str(x), kwargs.get(
+        'user_ks'))) + '_model_' + str(uuid1()) + '.csv'
+    df_validation.to_csv(os.path.join(reco_dir, dump_file_validation), index=False, encoding='utf8')
+    df_model.to_csv(os.path.join(reco_dir, dump_file_model), index=False, encoding='utf8')
+    pass
+
+
+def split_model_validation_dic(**kwargs):
+    df = pd.read_csv(kwargs.get('to_reco_csv_file'))
+    relation_row_list = df.iloc[:, 0:2].values.tolist()
+    # 先按repo为键组织
+    data_dic = defaultdict(list)
+    for row in relation_row_list:
+        data_dic[row[0]].append(row[1])
+    data_repo_set = data_dic.keys()  # sorted能直接返回list
+    model_repo_list, validation_repo_list = split_data_list(sorted(data_repo_set), kwargs.get('user_M'), kwargs.get('user_ks'), kwargs.get('user_seed'))
+    # 再划分成模型集和验证集
+    validation_repo_set = set(validation_repo_list)
+    model_dic = {}
+    validation_dic = {}
+    for key, val in data_dic.items():
+        if key in validation_repo_set:
+            validation_dic[key] = val
+        else:
+            model_dic[key] = val
+    validation_row_list = []
+    for repo, package_list in validation_dic.items():
+        for package in package_list:
+            validation_row_list.append([repo, package])
+    model_row_list = []
+    for repo, package_list in model_dic.items():
+        for package in package_list:
+            model_row_list.append([repo, package])
+    return validation_dic, validation_row_list, model_dic, model_row_list
 
 
 def split_train_test_dic(**kwargs):
@@ -97,9 +145,7 @@ def split_train_test_dic(**kwargs):
     df = pd.read_csv(kwargs.get('to_reco_csv_file'))
     relation_row_list = df.iloc[:, 0:2].values.tolist()
     # 划分关系
-    train_row_list, test_row_list = split_data_list(relation_row_list, kwargs.get('train_M'),
-                                                    kwargs.get('train_k'),
-                                                    kwargs.get('train_seed'))
+    train_row_list, test_row_list = split_data_list(relation_row_list, kwargs.get('split_M'), kwargs.get('test_ks'), kwargs.get('split_seed'))
     # 分别建立test和train的字典
     train_dic = defaultdict(list)
     test_dic = defaultdict(list)
@@ -110,31 +156,15 @@ def split_train_test_dic(**kwargs):
     return train_row_list, test_row_list, train_dic, test_dic
 
 
-def cal_dependency_count_dic(repo_dir, nameWithOwner, train_package_set):
-    repo_file = nameWithOwner.replace('/', '-$-') + '.json'
-    file_path = os.path.join(repo_dir, repo_file)
-    json_dic = read_json_file(file_path)
-    ground_truth_dependency_nodes_list = jsonpath.jsonpath(json_dic,
-                                                           "$.data.repository.dependencyGraphManifests.nodes[*].dependencies.nodes[*]")
-    depended_count_dic = defaultdict(int)
-    train_package_depended_count = 0
-    for node in ground_truth_dependency_nodes_list:
-        nameWithManager = re.sub(re.compile(r'\s+'), '', node.get("packageManager") + "/" + node.get("packageName"))
-        if nameWithManager in train_package_set:
-            train_package_depended_count += 1
-            depended_count_dic[nameWithManager] += 1
-    return depended_count_dic, train_package_depended_count
-
-
-def reco_packages_experiment(repo_portrait_dic, reco_method, topN):
+def reco_packages_experiment(repo_portrait_dic, kwargs):
     """
 
+    :param kwargs:
     :param repo_portrait_dic:
-    :param topN:
     :return:
     """
     url = "http://localhost:8080/github/exp/recommend/package"
-    payload = {"repo_portrait_dic": repo_portrait_dic, 'reco_method': reco_method, "topN": topN}
+    payload = {"repo_portrait_dic": repo_portrait_dic, 'kwargs': kwargs}
     # header_dict = {"Content-Type": "application/json; charset=utf8"}
     return requests.post(url=url, data=payload).content.decode("utf-8")
 
@@ -235,6 +265,19 @@ def refactorPackageCoOccurrence(nameWithOwner):
     return requests.post(url=url, data=payload).content.decode("utf-8")
 
 
+def delete_validationset_dependency_batch(**kwargs):
+    validation_dic, validation_row_list, model_dic, model_row_list = split_model_validation_dic(**kwargs)
+    for i, row in enumerate(validation_row_list):
+        if i < 27495:
+            continue
+        print(
+            "index: " + str(i + 1) + '/' + str(len(validation_row_list)) + ", deleting: " + str(row[0]) + " - " + str(row[1]))
+        response = delete_dependency(row[0], row[1])
+        if json.loads(response).get("status") != "success":
+            print(json.loads(response))
+            break
+
+
 def delete_testset_dependency_batch(**kwargs):
     """
 
@@ -245,14 +288,14 @@ def delete_testset_dependency_batch(**kwargs):
     df = pd.read_csv(kwargs.get('to_reco_csv_file'))
     relation_row_list = df.iloc[:, 0:2].values.tolist()
     # 划分关系
-    row_train_list, row_test_list = split_data_list(relation_row_list, kwargs.get('train_M'),
-                                                    kwargs.get('train_k'),
-                                                    kwargs.get('train_seed'))
-    for i, row in enumerate(row_test_list):
+    train_row_list, test_row_list = split_data_list(relation_row_list, kwargs.get('split_M'),
+                                                    kwargs.get('test_ks'),
+                                                    kwargs.get('split_seed'))
+    for i, row in enumerate(test_row_list):
         # if i < 42758:
         #     continue
         print(
-            "index: " + str(i + 1) + '/' + str(len(row_test_list)) + ", deleting: " + str(row[0]) + " - " + str(row[1]))
+            "index: " + str(i + 1) + '/' + str(len(test_row_list)) + ", deleting: " + str(row[0]) + " - " + str(row[1]))
         response = delete_dependency(row[0], row[1])
         if json.loads(response).get("status") != "success":
             print(json.loads(response))
@@ -306,17 +349,22 @@ def create_repo_by_jsonfile(file_path):
 
 
 def create_trainset_dependency_batch(**kwargs):
-    # 数据来源：所有依赖关系 -> 去掉repo的依赖数不足的
-    df = pd.read_csv(kwargs.get('csv_file'))
+    """
+    数据来源：数据集的所有依赖关系
+    :param kwargs:
+    :return:
+    """
+    df = pd.read_csv(kwargs.get('to_reco_csv_file'))
     relation_row_list = df.iloc[:, 0:3].values.tolist()
-    # 划分关系
-    row_train_list, row_test_list = split_data_list(relation_row_list, kwargs.get('model_M'),
-                                                    kwargs.get('model_k'),
-                                                    kwargs.get('model_seed'))
-    for i, row in enumerate(row_train_list):
-        if i < 97819:
-            continue
-        print("index: " + str(i) + ", merging: " + str(row[0]) + " - " + str(row[1]))
+    train_row_list, test_row_list = split_data_list(relation_row_list,
+                                                    kwargs.get('split_M'),
+                                                    kwargs.get('test_ks'),
+                                                    kwargs.get('split_seed'))
+    for i, row in enumerate(train_row_list):
+        # if i < 29030:
+        #     continue
+        print("index: " + str(i) + '/' + str(len(train_row_list)) + ", creating: " + str(row[0]) +
+              " - [""REPO_DEPENDS_ON_PACKAGE] - " + str(row[1]))
         response = create_dependency(row[0], row[1], row[2])
         if json.loads(response).get("status") != "success":
             print(json.loads(response))
@@ -328,85 +376,3 @@ def create_dependency(nameWithOwner, nameWithManager, requirements):
     # header_dict = {"Content-Type": "application/json; charset=utf8"}
     payload = {"nameWithOwner": nameWithOwner, "nameWithManager": nameWithManager, "requirements": requirements}
     return requests.post(url=url, data=payload).content.decode("utf-8")
-
-
-def reco_packages_batch_experiment_newset(**kwargs):
-    # 建议使用从csv读取need_set 替换成file格式
-    data = pd.read_csv(kwargs.get('csv_file'))
-    repo_row_list = sorted(data.iloc[:, 0:1].values.tolist())
-    repo_file_list = []
-    for repo in repo_row_list:
-        repo_file_list.append(repo[0].replace('/', '-$-') + '.json')
-    # 从文件夹读取
-    # repo_file_list = get_exist_repo_file_list(kwargs.get('dir'))
-    dup_repo_set, no_dependency_set, less_dependency_set = get_needless_repo_set(kwargs.get('dir'),
-                                                                                 repo_file_list,
-                                                                                 kwargs.get('min_dependency_count'))
-    need_set = set(repo_file_list) - dup_repo_set - no_dependency_set - less_dependency_set
-    # 划分模型集 和验证集
-    # split_data_list函数要想保证每次输出次序一样需要保证每次输入次序一样，也就是本身不保证每次次序一样
-    model_dataset, validation_dataset = split_data_list(sorted(list(need_set)), kwargs.get('model_M'),
-                                                        kwargs.get('model_k'),
-                                                        kwargs.get('model_seed'))
-    count = 0
-    TP = 0
-    Ru = 0
-    Tu = 0
-    # 在验证集里做验证
-    for i, repo_file in enumerate(validation_dataset):
-        # if i <= 336:
-        #     continue
-        print("file_index: " + str(i + 1) + ", recommended: " + str(count) + ", repo: " + str(repo_file))
-        file_path = os.path.join(kwargs.get('dir'), repo_file)
-        json_dic = read_json_file(file_path)
-        dependency_nodes_list = jsonpath.jsonpath(json_dic,
-                                                  "$.data.repository.dependencyGraphManifests.nodes[*].dependencies.nodes[*]")
-        # 对每个repo划分 训练集 和 测试集
-        # 统计依赖次数 depended_count_dic
-        # 首先对 dependency_nodes_list 去重 ，因为对于topN推荐，扔 M-1 份【不同的】关系进去，才是正确的召回率
-        nameWithManager_set = set()
-        depended_count_dic = {}
-        for node in dependency_nodes_list:
-            # 去除空白字符
-            nameWithManager = re.sub(re.compile(r'\s+'), '', node.get("packageManager") + "/" + node.get("packageName"))
-            nameWithManager_set.add(nameWithManager)
-            if nameWithManager in depended_count_dic:
-                depended_count_dic[nameWithManager] += 1
-            else:
-                depended_count_dic[nameWithManager] = 1
-        train_list, test_list = split_data_list(sorted(list(nameWithManager_set)), kwargs.get('train_M'),
-                                                kwargs.get('train_k'),
-                                                kwargs.get('train_seed'))
-        train_set = set(train_list)
-        test_set = set(test_list)
-        test_set_len = len(test_set)
-        # 计算train_set中每个package的tf值，注意虽然扔进去不同的关系，但是每个关系的权重要在去重前计算
-        input_dic_list = []
-        for package in train_set:
-            input_dic = {}
-            input_dic['nameWithManager'] = package
-            input_dic['dependedTF'] = float(depended_count_dic[package] / len(dependency_nodes_list))
-            input_dic_list.append(input_dic)
-        response = reco_packages_experiment(json.dumps(input_dic_list), kwargs.get('topN'))
-        response_json = json.loads(response)
-        if json.loads(response).get("status") != "success":
-            print(json.loads(response))
-            break
-        else:
-            count += 1
-        reco_set = set(response_json.get('data'))
-        # print('index:' + str(i) + ', ' + repo_file + "的推荐列表: " + str(reco_set))
-        single_intersection_count = len(reco_set & test_set)
-        single_precision = single_intersection_count / kwargs.get('topN')
-        if test_set_len == 0:
-            single_recall = 'no test set'
-        else:
-            single_recall = single_intersection_count / len(test_set)
-        print('single_precision: ' + str(single_intersection_count) + '/' + str(kwargs.get('topN')) +
-              ', single_recall: ' + str(single_intersection_count) + '/' + str(len(test_set)))
-        TP += single_intersection_count
-        Ru += kwargs.get('topN')
-        Tu += len(test_set)
-    precision, recall = cal_precision_recall(TP, Tu, Ru)
-    print('avg_precision: ' + str(precision) + ', avg_recall: ' + str(recall))
-    return precision, recall

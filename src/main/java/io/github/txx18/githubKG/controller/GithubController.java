@@ -30,11 +30,10 @@ public class GithubController {
 
     @RequestMapping(path = "/exp/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory recommendPackagesExperiment(@RequestParam("repo_portrait_dic") String repoPortraitJsonStr,
-                                                             @RequestParam("reco_method") String recoMethod,
-                                                             @RequestParam("topN") int topN) {
+                                                             @RequestParam("kwargs") String kwargsJsonStr) {
         List<Map<String, Object>> recoRecordList;
         try {
-            recoRecordList = githubService.recommendPackagesExperiment(repoPortraitJsonStr, recoMethod, topN);
+            recoRecordList = githubService.recommendPackagesExperiment(repoPortraitJsonStr, kwargsJsonStr);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseSimpleFactory.createResponse(e.getMessage());

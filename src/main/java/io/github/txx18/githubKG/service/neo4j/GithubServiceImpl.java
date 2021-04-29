@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GithubMapper;
+import io.github.txx18.githubKG.mapper.GraphMapper;
 import io.github.txx18.githubKG.model.DependencyPackage;
 import io.github.txx18.githubKG.model.Page;
 import io.github.txx18.githubKG.service.GithubService;
@@ -29,39 +30,49 @@ public class GithubServiceImpl implements GithubService {
 
     private final GithubMapper githubMapper;
 
-    public GithubServiceImpl(GithubMapper githubMapper) {
+    private final GraphMapper graphMapper;
+
+    public GithubServiceImpl(GithubMapper githubMapper, GraphMapper graphMapper) {
         this.githubMapper = githubMapper;
+        this.graphMapper = graphMapper;
     }
 
-    @Override
-    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
-        System.out.println("start to refactor: " + nameWithManager);
-        return githubMapper.refactorRepoCoPackageRepo(nameWithManager.replaceAll("\\s*", ""));
-    }
 
     @Override
-    public List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String recoMethod, int topN) throws Exception {
+    public List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String kwargsJsonStr) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Map<String, Object> repoPortraitMap = objectMapper.readValue(repoPortraitJsonStr, Map.class);
+        String nameWithOwner = (String) repoPortraitMap.get("nameWithOwner");
         List<Map<String, Object>> dependencyMapList = (List<Map<String, Object>>) repoPortraitMap.get("dependency_dic_list");
 //        List<Map<String, Object>> dependencyMapList = JsonPath.read(jsonStr, "$.*"); // dependedTF被转成了BigDecimal
         List<String> dependencyNameList = new ArrayList<>();
         for (Map<String, Object> map : dependencyMapList) {
             dependencyNameList.add(((String) map.get("nameWithManager")).replaceAll("\\s*", ""));
         }
+        Map<String, Object> kwargsMap = objectMapper.readValue(kwargsJsonStr, Map.class);
+        String recoMethod = (String) kwargsMap.get("reco_method");
+        int topN = (int) kwargsMap.get("topN");
+        int UCF_KNN = (int) kwargsMap.get("UCF_KNN");
         List<Map<String, Object>> res;
         switch (recoMethod) {
             case "ICF":
-                res = githubMapper.recommendPackagesExperimentICF(dependencyNameList, dependencyMapList, topN);
+                res = graphMapper.recommendPackagesExperimentICF(nameWithOwner, dependencyNameList, dependencyMapList
+                        , topN);
                 return res;
             case "UCF":
-                res = githubMapper.recommendPackagesExperimentUCF(dependencyNameList, dependencyMapList, topN);
+                res = graphMapper.recommendPackagesExperimentUCF(nameWithOwner, dependencyNameList, dependencyMapList
+                        , topN, UCF_KNN);
                 return res;
             case "Popular":
-                res = githubMapper.recommendPackagesExperimentPopular(dependencyNameList, topN);
+                res = graphMapper.recommendPackagesExperimentPopular(dependencyNameList, topN);
                 return res;
             case "Graph":
-                res = githubMapper.recommendPackagesExperimentGraph(dependencyNameList, dependencyMapList, topN);
+                // 对于不在图中的用户，先需要计算出自己的 xxxRepoIDFQuadraticSum，也就需要先找到图中的那些画像的xxx
+                // 目前验证集没有package的关联，但其他关联还保留，方便实验，所以目前只用找package
+                res = graphMapper.recommendPackagesExperimentGraph(nameWithOwner, dependencyNameList, dependencyMapList, topN, UCF_KNN);
+                return res;
+            case "Random":
+                res = graphMapper.recommendPackagesExperimentRandom(dependencyNameList, topN);
                 return res;
             default:
                 throw new Exception("没有选择推荐方法！");
@@ -95,6 +106,12 @@ public class GithubServiceImpl implements GithubService {
         }
         List<String> res = githubMapper.recommendPackages(dependencyNameList, dependencyMapList, pageNum, pageSize);
         return page;
+    }
+
+    @Override
+    public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
+        System.out.println("start to refactor: " + nameWithManager);
+        return githubMapper.refactorRepoCoPackageRepo(nameWithManager.replaceAll("\\s*", ""));
     }
 
     @Override

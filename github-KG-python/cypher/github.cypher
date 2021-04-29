@@ -1,86 +1,231 @@
 // Graph
-// Graph_cosine_P_R
-UNWIND $dependencyMapList AS map
-MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
-  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
-  WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum((1 / (sqrt(package_i.dependedDegree * package_j.dependedDegree * repo_j.dependDegree)))) AS score
-  ORDER BY score DESC
+// Graph_MetaPath折叠元路径 主要用于cosine系列
+// 【直接package】每个推荐器找到自己的KNN Repo, 分别推荐package
+// language
+OPTIONAL MATCH(repo_i:Repository {nameWithOwner: $nameWithOwner})-[r_i:REPO_USES_LANGUAGE]->(language:Language)<-[r_j:REPO_USES_LANGUAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(repo_i.languageTfIdfQuadraticSum * repo_j.languageTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE (NOT package_j.nameWithManager IN $dependencyNameList)
+WITH package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// Paper
+OPTIONAL MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})<-[r_i:PAPER_IMPLEMENTED_BY_REPO]-(paper:Paper)-[r_j:PAPER_IMPLEMENTED_BY_REPO]->
+(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(repo_i.paperTfIdfQuadraticSum * repo_j.paperTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE (NOT package_j.nameWithManager IN $dependencyNameList)
+WITH rows, package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (rows + collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// Task
+OPTIONAL MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[r_i:REPO_IMPLEMENTS_PAPER_UNDER_TASK]->(task:Task)
+                 <-[r_j:REPO_IMPLEMENTS_PAPER_UNDER_TASK]-(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(repo_i.taskTfIdfQuadraticSum * repo_j.taskTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE (NOT package_j.nameWithManager IN $dependencyNameList)
+WITH rows, package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (rows + collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// Method
+OPTIONAL MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[r_i:REPO_IMPLEMENTS_PAPER_USES_METHOD]->(method:Method)
+                 <-[r_j:REPO_IMPLEMENTS_PAPER_USES_METHOD]-(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(repo_i.methodTfIdfQuadraticSum * repo_j.methodTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE (NOT package_j.nameWithManager IN $dependencyNameList)
+WITH rows, package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (rows + collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// Dataset
+OPTIONAL MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[r_i:REPO_IMPLEMENTS_MODEL_ON_DATASET]->(dataset:Dataset)
+                 <-[r_j:REPO_IMPLEMENTS_MODEL_ON_DATASET]-(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(repo_i.datasetTfIdfQuadraticSum * repo_j.datasetTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE (NOT package_j.nameWithManager IN $dependencyNameList)
+WITH rows, package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (rows + collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// 汇总
+UNWIND rows AS row
+WITH row.nameWithManager AS recommend, sum(row.score) AS score
+  WHERE recommend IS NOT NULL
+RETURN recommend, score
+  ORDER BY score DESC, recommend DESC
   LIMIT $topN
-// Graph_tfidf_P
+// Package
+/*OPTIONAL MATCH(repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_DEPENDS_ON_PACKAGE]->(:Package)
+                <-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 / sqrt(repo_i.packageDegree * repo_j.packageDegree)) AS score*/
 UNWIND $dependencyMapList AS map
-MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[r_j:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH rows, repo_j, sum(1.0 * map.packageTfIdf * r_j.TfIdf / sqrt($packageTfIdfQuadraticSum * repo_j.packageTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+OPTIONAL MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurrenceCount * package_i.dependedIDF
-* package_j.dependedIDF) AS score
-  ORDER BY score DESC
+WITH rows, package_j.nameWithManager AS package_j_nameWithManager, sum(1.0 * score) AS score
+WITH (rows + collect({nameWithManager: package_j_nameWithManager, score: score})) AS rows
+// 汇总
+UNWIND rows AS row
+WITH row.nameWithManager AS recommend, sum(row.score) AS score
+  WHERE recommend IS NOT NULL
+RETURN recommend, score
+  ORDER BY score DESC, recommend DESC
   LIMIT $topN
-// Graph_cosine_P_tfidf_P
+
+// UCF_cosine_Pac
+// 1 不在图中的新用户写法 UCF_cosine_Package_userNotInGraph
 UNWIND $dependencyMapList AS map
-MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[r_i:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * map.packageTfIdf * r_i.TfIdf / (sqrt($packageTfIdfQuadraticSum * repo_j.packageTfIdfQuadraticSum))) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[r_j:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum(co.coOccurrenceCount * package_i.dependedIDF * package_j.dependedIDF / sqrt(package_i.
-         dependedDegree * package_j.dependedDegree)) AS score
-  ORDER BY score DESC
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
   LIMIT $topN
-// Graph_cosine_P_tfidf_P_R
-UNWIND $dependencyMapList AS map
-MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
-  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+// 2 图中用户写法 UCF_cosine_Package_userInGraph
+MATCH(repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_DEPENDS_ON_PACKAGE]->(package_i:Package)
+       <-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * package_i.repoIDF ^ 2 / (sqrt(repo_i.packageRepoIDFQuadraticSum * repo_j.packageRepoIDFQuadraticSum))) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.
-         dependedDegree * package_j.dependedDegree))) AS score
-  ORDER BY score DESC
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
   LIMIT $topN
-// Graph_cosine_P_R_tfidf_P_R
+// Jaccard
 UNWIND $dependencyMapList AS map
-MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
-  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[r_i:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 / (repo_j.packageDegree)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[r_j:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum((1 * package_i.dependedIDF * package_j.dependedIDF * repo_j.dependIDF / sqrt(package_i.
-         dependedDegree * package_j.dependedDegree * repo_j.dependDegree))) AS score
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_cosine_Language
+MATCH(repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_USES_LANGUAGE]->(language:Language)
+       <-[:REPO_USES_LANGUAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * language.repoIDF ^ 2 / (sqrt(repo_i.languageRepoIDFQuadraticSum * repo_j.languageRepoIDFQuadraticSum))) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_cosine_Paper
+MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})<-[:PAPER_IMPLEMENTED_BY_REPO]-(paper:Paper)
+        -[:PAPER_IMPLEMENTED_BY_REPO]->(repo_j:Repository)
+WITH repo_j, sum(1.0 * paper.repoIDF ^ 2 / sqrt(repo_i.paperRepoIDFQuadraticSum * repo_j.paperRepoIDFQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_cosine_Task
+MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_IMPLEMENTS_PAPER_UNDER_TASK]->(task:Task)
+        <-[:REPO_IMPLEMENTS_PAPER_UNDER_TASK]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * task.repoIDF ^ 2 / sqrt(repo_i.taskRepoIDFQuadraticSum * repo_j.taskRepoIDFQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_cosine_Method
+MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_IMPLEMENTS_PAPER_USES_METHOD]->(method:Method)
+        <-[:REPO_IMPLEMENTS_PAPER_USES_METHOD]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * method.repoIDF ^ 2 / sqrt(repo_i.methodRepoIDFQuadraticSum * repo_j.methodRepoIDFQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_cosine_Dataset
+MATCH (repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_IMPLEMENTS_MODEL_ON_DATASET]->(dataset:Dataset)
+        <-[:REPO_IMPLEMENTS_MODEL_ON_DATASET]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * dataset.repoIDF ^ 2 / sqrt(repo_i.datasetRepoIDFQuadraticSum * repo_j.datasetRepoIDFQuadraticSum)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_PathSim_Pac
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * 2 / (size($dependencyNameList) + repo_j.packageDegree)) AS score
+  ORDER BY score DESC, repo_j.nameWithOwner DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
+  ORDER BY score DESC, package_j.nameWithManager DESC
+  LIMIT $topN
+// UCF_IIF_cosine_Pac
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+WITH repo_j, sum(1.0 * (1 / log(1 + package_i.repoDegree)) / (sqrt(size($dependencyNameList) * repo_j.packageDegree)
+)) AS score
+  ORDER BY score DESC
+  LIMIT $UCF_KNN
+MATCH (repo_j)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend, sum(1.0 * score) AS score
   ORDER BY score DESC
   LIMIT $topN
 
 
-// UCF
+// ICF_cosine_Pac_tfidf_Pac
+// 不在图中的新用户写法
+UNWIND $dependencyMapList AS map
+MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[r_i:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
+        -[r_j:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum(1.0 * r_i.TfIdf * r_j.TfIdf / sqrt(package_i.repoTfIdfQuadraticSum * package_j.repoTfIdfQuadraticSum)) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// 图中用户写法
+MATCH(repo_i:Repository {nameWithOwner: $nameWithOwner})-[:REPO_DEPENDS_ON_PACKAGE]->(package_i:Package)
+       <-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)-[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
+  WHERE NOT package_j.nameWithManager IN $dependencyNameList
+RETURN package_j.nameWithManager AS recommend,
+       sum(1.0 / sqrt(package_i.repoDegree * package_j.repoDegree)) AS score
+  ORDER BY score DESC
+  LIMIT $topN
+// ICF_PathSim_Pac
 UNWIND $dependencyMapList AS map
 MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
         -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend, sum(1 / (sqrt(size($dependencyNameList) * repo_j.dependDegree))) AS score
+RETURN package_j.nameWithManager AS recommend,
+       sum(1.0 * 2 / (package_i.repoDegree + package_j.repoDegree)) AS score
   ORDER BY score DESC
   LIMIT $topN
-// UCF_IIF
+// ICF_IUF_cosine_Pac
 UNWIND $dependencyMapList AS map
 MATCH (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
         -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
   WHERE NOT package_j.nameWithManager IN $dependencyNameList
 RETURN package_j.nameWithManager AS recommend,
-       sum(1 * (1 / log(1 + package_i.dependedDegree)) / (sqrt(size($dependencyNameList) * repo_j.dependDegree))) AS
-       score
-  ORDER BY score DESC
-  LIMIT $topN
-
-// ICF
-UNWIND $dependencyMapList AS map
-MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)
-  WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum(co.coOccurrenceCount / sqrt(package_i.dependedDegree * package_j.dependedDegree)) AS score
-  ORDER BY score DESC
-  LIMIT $topN
-// ICF_IUF
-UNWIND $dependencyMapList AS map
-MATCH p = (package_i:Package {nameWithManager: map.nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo_j:Repository)
-  -[:REPO_DEPENDS_ON_PACKAGE]->(package_j:Package)
-  WHERE NOT package_j.nameWithManager IN $dependencyNameList
-RETURN package_j.nameWithManager AS recommend,
-       sum((1 * (1 / log(1 + repo_j.dependDegree)) / sqrt(package_i.dependedDegree * package_j.dependedDegree)))
+       sum((1.0 * (1 / log(1 + repo_j.packageDegree))) / sqrt(package_i.repoDegree * package_j.repoDegree))
        AS score
   ORDER BY score DESC
   LIMIT $topN
@@ -89,9 +234,17 @@ RETURN package_j.nameWithManager AS recommend,
 // Popular 热门推荐
 MATCH (package:Package)<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)
   WHERE NOT package.nameWithManager IN $dependencyNameList
-WITH package.nameWithManager AS nameWithManager, count(repo) AS dependedDegree
-RETURN nameWithManager AS recommend, dependedDegree AS score
-  ORDER BY dependedDegree DESC
+WITH package.nameWithManager AS nameWithManager, count(repo) AS repoDegree
+RETURN nameWithManager AS recommend, repoDegree AS score
+  ORDER BY repoDegree DESC
+  LIMIT $topN
+
+// 随机推荐
+MATCH (package:Package)
+  WHERE exists((package)<-[:REPO_DEPENDS_ON_PACKAGE]-(:Repository))
+  AND NOT package.nameWithManager IN $dependencyNameList
+RETURN DISTINCT package.nameWithManager AS recommend, rand() AS score
+  ORDER BY score
   LIMIT $topN
 
 // 删除依赖关系 Repository - REPO_DEPENDS_ON_PACKAGE -> Package
@@ -114,8 +267,8 @@ MATCH (be_depended_package:Package)
 WITH count(be_depended_package) AS be_depended_package_count
 MATCH (repo:Repository {nameWithOwner: $nameWithOwner})-[depend:REPO_DEPENDS_ON_PACKAGE]->(package:Package)
 WITH count(package) AS degree, repo, be_depended_package_count
-SET repo.dependDegree = degree
-SET repo.dependIDF = log(be_depended_package_count * 1.0 / (1 + degree))
+SET repo.packageDegree = degree
+SET repo.packageIDF = log(be_depended_package_count * 1.0 / (1 + degree))
 
 // 更新package的度数和idf值，且针对有被依赖的（否则应该使用OPTIONAL MATCH）
 MATCH (has_dependency_repo:Repository)
@@ -123,8 +276,8 @@ MATCH (has_dependency_repo:Repository)
 WITH count(has_dependency_repo) AS has_dependency_repo_count
 MATCH (package:Package {nameWithManager: $nameWithManager})<-[depend:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)
 WITH count(repo) AS degree, package, has_dependency_repo_count
-SET package.dependedDegree = degree
-SET package.dependedIDF = log(has_dependency_repo_count * 1.0 / (1 + degree))
+SET package.repoDegree = degree
+SET package.repoIDF = log(has_dependency_repo_count * 1.0 / (1 + degree))
 
 
 // 遍历一个Repo的Package
@@ -136,7 +289,7 @@ RETURN pack.nameWithManager AS nameWithManager
 // Repo - REPO_CO_PACKAGE_REPO - Repo
 // 一个Packge可能被上万个repo依赖，握手握不动。。
 MATCH (package:Package {nameWithManager: $nameWithManager})<-[:REPO_DEPENDS_ON_PACKAGE]-(repo:Repository)
-WITH package, count(repo) AS dependedDegree
+WITH package, count(repo) AS repoDegree
 WITH collect(repo.nameWithOwner) AS repoNames
 UNWIND range(0, size(repoNames) - 1) AS i
 UNWIND range(i + 1, size(repoNames) - 1) AS j

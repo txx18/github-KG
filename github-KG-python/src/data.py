@@ -1,8 +1,90 @@
-import random
-from collections import OrderedDict
-
+from github import *
 from statistic import *
 from util.FileUtils import *
+
+
+def construct_label_data(recommender_result_json_file_dic, out_csv):
+    """
+
+    :param out_csv:
+    :param recommender_result_json_file_dic: key：推荐器名称 val：结果文件
+    :return:
+    """
+    recommender_result_json_dic = {}
+    for recommender in recommender_result_json_file_dic.keys():
+        recommender_result_json_dic[recommender] = read_json_file(recommender_result_json_file_dic[recommender])
+    # 这个字典需要增量更新
+    repo_package_row_dic = defaultdict(dict)
+    for recommender, reco_result_json_dic in recommender_result_json_dic.items():
+        for repo_i, record_list in reco_result_json_dic.items():
+            for record in record_list:
+                package_j = record['nameWithManager']
+                if repo_package_row_dic[repo_i].get(package_j) is None:
+                    repo_package_row_dic[repo_i][package_j] = defaultdict()
+                    # 默认所有recommender的score为0
+                    for key in recommender_result_json_file_dic.keys():
+                        repo_package_row_dic[repo_i][package_j][key] = 0.0
+                repo_package_row_dic[repo_i][package_j][recommender] = record['score']
+                repo_package_row_dic[repo_i][package_j]['hit'] = record['hit']
+    # 把嵌套字典展平
+    res_row_list = []
+    for repo_i, val1 in repo_package_row_dic.items():
+        for package_j, val2 in val1.items():
+            res_row_dic = {'repo_i': repo_i, 'package_j': package_j}
+            for key in val2.keys():
+                res_row_dic[key] = val2[key]
+            res_row_list.append(res_row_dic)
+    df = pd.DataFrame(res_row_list)
+    df.to_csv(out_csv, index=False)
+    pass
+
+
+def add_recommender_label(reco_result_json_file, **kwargs):
+    """
+    数据集全作为测试集
+    :param reco_result_json_file:
+    :param kwargs:
+    :return:
+    """
+    train_row_list, test_row_list, train_dic, test_dic = split_train_test_dic(**kwargs)
+    total_test_repo_set = test_dic.keys()
+    payload_repo_set = set()
+    # 如果是检验内容推荐器，在计算指标时训练集和测试集都是全集
+    if kwargs.get('all_testset'):
+        payload_repo_set = sorted(total_test_repo_set)
+    else:
+        print('数据集全作为测试集')
+        exit(0)
+    reco_result_json_dic = read_json_file(reco_result_json_file)
+    # 对测试集中每个repo检查推荐结果
+    for index, nameWithOwner in enumerate(payload_repo_set):
+        print('-------------------------------------------------------------')
+        print("index: " + str(index + 1) + "/" + str(len(payload_repo_set)) + ", repo: " + str(nameWithOwner))
+        test_package_set = set(test_dic[nameWithOwner])
+        reco_package_set = set()
+        # 依次检查 test_package_set 每个 package 是否命中
+        for record in reco_result_json_dic[nameWithOwner]:
+            reco_package_set.add(record['nameWithManager'])
+            # 如果命中，则标记为1，没命中则标记为0
+            if record['nameWithManager'] in test_package_set:
+                # 可以做到修改原字典
+                record['hit'] = 1
+            else:
+                record['hit'] = 0
+        # 对于推荐列表中没有而在测试集中有的，新增记录，score为 0，hit为 1
+        not_in_reco_package_set = test_package_set - reco_package_set
+        for package in not_in_reco_package_set:
+            reco_result_json_dic[nameWithOwner].append({'score': 0.0, 'nameWithManager': package, 'hit': 1})
+    # 序列化结果
+    to_reco_csv_file = kwargs.get('to_reco_csv_file').split('\\')[-1:][0]
+    split_dir_name = 'split_' + str(kwargs.get('split_M')) + '_test_' + "_".join(map(lambda x: str(x), kwargs.get(
+        'test_ks')))
+    out_dir = kwargs.get('out_dir') + '/' + os.path.join(os.path.splitext(to_reco_csv_file)[0], split_dir_name,
+                                                         'top' + str(kwargs.get('topN')), 'label')
+    dump_file = os.path.splitext(reco_result_json_file.split('\\')[-1:][0])[0] + '_label_' + str(uuid1()) + '.json'
+    dump_file_path = out_dir + '/' + dump_file
+    write_json_file(out_dir, dump_file_path, reco_result_json_dic)
+    pass
 
 
 def rename_file_name_not_match_nameWithOwner(repo_dir):
@@ -10,42 +92,6 @@ def rename_file_name_not_match_nameWithOwner(repo_dir):
     for item in target_file_tuple:
         os.rename(os.path.join(repo_dir, item[0]), os.path.join(repo_dir, item[1]))
     print('finish rename!')
-
-
-def split_data_list(raw_lst, M, k, seed):
-    '''
-    :param raw_lst: 要想保证每次输出都是相同，输入要自己保证是固定的顺序；此函数只保证划分list，如果要去重要自己输入list(set)
-    :param M:
-    :param k:
-    :param seed:
-    :return: 不转为set，
-    '''
-
-    N = len(raw_lst)
-    index_lst = [i for i in range(0, N)]
-    index_dic = defaultdict(list)
-    offset = int(N / M)
-    for i in range(0, M):
-        random.seed(seed)
-        # 从lst中采样offset个元素
-        index_dic['set_' + str(i)] = random.sample(index_lst, offset)
-        # for repo in dic['set_' + str(i)]:
-        #     lst.remove(repo)
-        index_lst = list(set(index_lst) - set(index_dic['set_' + str(i)]))
-    # index_lst还有剩余（余数），依次加入前几个set_
-    for i in range(len(index_lst)):
-        index_dic['set_' + str(i)].append(index_lst[i])
-    item_dic = defaultdict(list)
-    for i in range(0, M):
-        for index in index_dic['set_' + str(i)]:
-            item_dic['set_' + str(i)].append(raw_lst[index])
-    train_list = []
-    # 选其中一份作为测试，其余训练模型
-    for key, val in item_dic.items():
-        if key != 'set_' + str(k):
-            train_list.extend(val)
-    test_list = item_dic.get('set_' + str(k))
-    return train_list, test_list
 
 
 def move_needless_repo(src_dir, dup_dir, no_dependency_dir, target_file_list, min_dependency_count):

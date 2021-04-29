@@ -17,7 +17,7 @@ public interface GithubService {
 
     String updatePackageIDF(String nameWithManager) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String recoMethod, int topN) throws Exception;
+    List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String kwargsJsonStr) throws Exception;
 
     String updateRepoIDF(String nameWithOwner) throws DAOException;
 

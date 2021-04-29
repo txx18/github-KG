@@ -3,3 +3,12 @@ chardet==3.0.4
 idna==2.10
 requests==2.24.0
 urllib3==1.25.11
+
+numpy~=1.19.3
+pandas~=1.1.4
+neo4j~=4.2.1
+jsonpath~=0.82
+lxml~=4.6.2
+seaborn~=0.11.1
+matplotlib~=3.3.4
+surprise~=0.1

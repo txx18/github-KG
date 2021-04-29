@@ -3,6 +3,8 @@ rebel.xml
 /backup
 /result
 test
+experiment
+log
 
 HELP.md
 target/

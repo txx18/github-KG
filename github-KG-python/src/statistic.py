@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from collections import defaultdict
 
@@ -6,6 +7,22 @@ import jsonpath
 import pandas as pd
 
 from util.FileUtils import read_json_file
+
+
+def stat_dependency_count_dic(repo_dir, nameWithOwner, train_package_set):
+    repo_file = nameWithOwner.replace('/', '-$-') + '.json'
+    file_path = os.path.join(repo_dir, repo_file)
+    json_dic = read_json_file(file_path)
+    ground_truth_dependency_nodes_list = jsonpath.jsonpath(json_dic,
+                                                           "$.data.repository.dependencyGraphManifests.nodes[*].dependencies.nodes[*]")
+    depended_count_dic = defaultdict(int)
+    train_package_depended_count = 0
+    for node in ground_truth_dependency_nodes_list:
+        nameWithManager = re.sub(re.compile(r'\s+'), '', node.get("packageManager") + "/" + node.get("packageName"))
+        if nameWithManager in train_package_set:
+            train_package_depended_count += 1
+            depended_count_dic[nameWithManager] += 1
+    return depended_count_dic, train_package_depended_count
 
 
 def get_file_name_not_match_nameWithOwner(repo_dir):

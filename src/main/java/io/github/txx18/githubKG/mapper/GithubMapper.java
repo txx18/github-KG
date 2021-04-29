@@ -32,8 +32,6 @@ public interface GithubMapper {
 
     String updatePackageIDF(String nameWithManager) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperimentICF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
-
     String updateRepoIDF(String nameWithOwner) throws DAOException;
 
     String mergeRepoDependsOnPackage(String nameWithOwner, String nameWithManager, String requirements) throws DAOException;
@@ -42,9 +40,5 @@ public interface GithubMapper {
 
     String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperimentUCF(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
 
-    List<Map<String, Object>> recommendPackagesExperimentPopular(List<String> dependencyNameList, int topN) throws DAOException;
-
-    List<Map<String, Object>> recommendPackagesExperimentGraph(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int topN) throws DAOException;
 }
