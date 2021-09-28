@@ -14,7 +14,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.neo4j.driver.Values.parameters;
 
@@ -33,34 +32,6 @@ public class GithubMapperImpl implements GithubMapper {
         this.driver = driver;
     }
 
-
-    @Override
-    public List<String> recommendPackages(List<String> dependencyNameList, List<Map<String, Object>> dependencyMapList, int pageNum, int pageSize) throws DAOException {
-        String query = "// 针对一个package_list做推荐\n" +
-                "UNWIND $dependencyMapList AS map\n" +
-                "MATCH (package_i:Package {nameWithManager: map.nameWithManager})-[co:PACKAGE_CO_OCCUR_PACKAGE]-(package_j:Package)\n" +
-                "  WHERE NOT package_j.nameWithManager IN $dependencyNameList\n" +
-                "RETURN package_j.nameWithManager AS recommend, map.dependedTF * sum(co.coOccurrenceCount * package_j.repoIDF) AS\n" +
-                "score\n" +
-                "  ORDER BY score DESC\n" +
-                "  SKIP $pageNum\n" +
-                "  LIMIT $pageSize";
-        try (Session session = driver.session()) {
-            return session.readTransaction(tx -> {
-                List<String> res = new ArrayList<>();
-                Result result = tx.run(query, parameters("dependencyMapList", dependencyMapList, "dependencyNameList", dependencyNameList, "pageNum",
-                        pageNum, "pageSize", pageSize));
-                while (result.hasNext()) {
-                    res.add(result.next().get("recommend").asString());
-                }
-                return res;
-            });
-        } catch (Exception e) {
-            String log = "recommendPackages failed!";
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
-    }
 
     @Override
     public String updateRepoIDF(String nameWithOwner) throws DAOException {

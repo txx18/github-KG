@@ -4,7 +4,6 @@ import cn.hutool.json.JSONObject;
 import io.github.txx18.githubKG.exception.DAOException;
 
 import java.util.List;
-import java.util.Map;
 
 public interface GithubMapper {
 
@@ -27,8 +26,6 @@ public interface GithubMapper {
     List<String> matchRepoDependsOnPackages(String nameWithOwner) throws DAOException;
 
     String refactorPackageCoOccur(String nameWithOwner) throws DAOException;
-
-    List<String> recommendPackages(List<String> dependencyNameList, List<Map<String, Object>> packageMapList, int pageNum, int pageSize) throws DAOException;
 
     String updatePackageIDF(String nameWithManager) throws DAOException;
 

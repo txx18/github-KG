@@ -2,7 +2,6 @@ import base64
 import hashlib
 import logging
 import random
-import re
 import time
 
 import requests
@@ -214,7 +213,7 @@ class GithubAPIv3(object):
                     return "poor network"
                 self.retry_times += 1
                 # 重试超过10次，记录并跳过（break完成跳过）
-                if self.retry_times >= 5:
+                if self.retry_times >= 10:
                     write_file_line_append(out_dir_path, out_dir_path + "/exclude/retry_over_repo.txt", repo_full_name)
                     self.retry_times = 0
                     self.fail_times += 1
@@ -232,12 +231,15 @@ class GithubAPIv3(object):
 v3 = GithubAPIv3()
 
 
-def get_repo_readme_batch(target, **kwargs):
+def get_repo_readme_batch(kwargs):
     out_dir = kwargs.get('out_dir')
-    target_repo_list = get_target_repo_list(target, **kwargs)
+    target_repo_list = get_target_repo_list(kwargs)
     payload_repo_set = get_payload_repo_set(target_repo_list, out_dir)
-    for repo_full_name in payload_repo_set:
-        v3.get_repo_readme(repo_full_name, out_dir)
+    payload_repo_set = sorted(payload_repo_set)
+    for index, nameWithOwner in enumerate(payload_repo_set):
+        print()
+        print('\033[31m' + 'index: ' + str(index + 1) + "/" + str(len(payload_repo_set)) + ", repo: " + str(nameWithOwner) + '-' * 100 + '\033[0m')
+        v3.get_repo_readme(nameWithOwner, out_dir)
     print("get_repo_readme_batch finished!")
 
 
@@ -445,9 +447,9 @@ def get_repos_batch(target, **kwargs):
         print("has crawled: " + str(crawled_count) + "/" + str(len(target_repo_set)))
 
 
-def get_target_repo_list(target, **kwargs):
+def get_target_repo_list(kwargs):
     pattern = re.compile(r'\s+')
-    if target == 1:
+    if kwargs.get('target') == 'links-between-papers-and-code':
         # 从 2 links-between-papers-and-code 获取 repo_url
         json_file_path = kwargs.get("json_file_path")
         json_dic = read_json_file(json_file_path)
@@ -459,19 +461,24 @@ def get_target_repo_list(target, **kwargs):
             nameWithOwner = re.sub(pattern, '', tokens[3] + "/" + tokens[4])
             nameWithOwner_list.append(nameWithOwner)
         return nameWithOwner_list
-    elif target == 2:
-        data_file = kwargs.get('dev_repos_csv')
-        data = pd.read_csv(data_file)
-        repo_row_list = data.iloc[:, 0:1].values.tolist()
-        repo_list = []
-        for repo_row in repo_row_list:
-            repo_list.append(repo_row[0])
-        return repo_list
+    elif kwargs.get('target') == 'dev_repos_csv' or kwargs.get('target') == 'repo_has_model':
+        data_file = kwargs.get('target_file')
+        dic_list = pd.read_csv(data_file).to_dict(orient='records')
+        repo_dic = defaultdict(list)
+        for record in dic_list:
+            repo_dic[record['nameWithOwner']].append(record['nameWithManager'])
+        return list(repo_dic.keys())
 
 
 def get_payload_repo_set(target_repo_list, out_dir_path):
+    """
+    断点续传
+    :param target_repo_list:
+    :param out_dir_path:
+    :return:
+    """
     pattern = re.compile(r'\s+')
-    exist_repo_list = get_exist_repo_list(out_dir_path)
+    exist_repo_list = get_exist_repo_list_by_fileName(out_dir_path)
     try:
         dup_repo_list = read_file_lines(out_dir_path + "/exclude/dup_repo.txt")
     except FileNotFoundError as e:
@@ -513,7 +520,7 @@ def crawl_repo_on_two_machine(not_exist_repo_set):
 def get_topic_repos(self, topic_dir_path, out_dir_path):
     data_one_topic_repo_set = get_data_one_topic_repo_set(topic_dir_path)
     # 扫描已有的仓库数据
-    data_repo_set = get_exist_repo_list(out_dir_path)
+    data_repo_set = get_exist_repo_list_by_info(out_dir_path)
     payload_repo_set = data_one_topic_repo_set - data_repo_set
     for repo in payload_repo_set:
         self.get_repo(repo, out_dir_path)
@@ -541,7 +548,7 @@ def get_topics_repos_batch(topic_repo_dir_path, out_dir_path):
     # 扫描topic需要爬取的仓库
     data_topic_repo_set = get_data_topic_repo_set(topic_repo_dir_path)
     # 扫描已有的仓库数据
-    data_repo_set = get_exist_repo_list(out_dir_path)
+    data_repo_set = get_exist_repo_list_by_info(out_dir_path)
     payload_repo_set = data_topic_repo_set - data_repo_set
     for repo in payload_repo_set:
         v4.get_repo(repo, out_dir_path)

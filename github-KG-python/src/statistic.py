@@ -90,7 +90,7 @@ def get_needless_repo_set(repo_dir, raw_file_list, min_dependency_count):
     return dup_set, no_dependency_set, less_dependency_set
 
 
-def get_exist_repo_list(repo_dir_path):
+def get_exist_repo_list_by_info(repo_dir_path):
     res_list = []
     for repo_index, repo_file in enumerate(os.listdir(repo_dir_path)):
         ext = os.path.splitext(repo_file)[1]
@@ -101,12 +101,23 @@ def get_exist_repo_list(repo_dir_path):
     return res_list
 
 
-def get_exist_repo_file_list(dir):
+def get_exist_repo_file_list(repo_dir):
     res_list = []
-    for repo_index, repo_file in enumerate(os.listdir(dir)):
+    for repo_index, repo_file in enumerate(os.listdir(repo_dir)):
         ext = os.path.splitext(repo_file)[1]
         if ext == ".json" or ext == '.md':
             res_list.append(repo_file)
+    return res_list
+
+
+def get_exist_repo_list_by_fileName(repo_dir):
+    res_list = []
+    for repo_index, repo_file in enumerate(os.listdir(repo_dir)):
+        ext = os.path.splitext(repo_file)[1]
+        if ext == ".json" or ext == '.md':
+            file_name = os.path.splitext(repo_file)[0]
+            nameWithOwner = file_name.replace('-$-', '/')
+            res_list.append(nameWithOwner)
     return res_list
 
 

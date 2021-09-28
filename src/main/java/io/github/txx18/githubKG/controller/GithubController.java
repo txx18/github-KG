@@ -2,17 +2,12 @@ package io.github.txx18.githubKG.controller;
 
 import cn.hutool.core.util.StrUtil;
 import io.github.txx18.githubKG.exception.DAOException;
-import io.github.txx18.githubKG.model.DependencyPackage;
-import io.github.txx18.githubKG.model.Page;
 import io.github.txx18.githubKG.model.ResponseSimpleFactory;
 import io.github.txx18.githubKG.service.GithubService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * @author ShaneTang
@@ -28,22 +23,6 @@ public class GithubController {
         this.githubService = githubService;
     }
 
-    @RequestMapping(path = "/exp/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseSimpleFactory recommendPackagesExperiment(@RequestParam("repo_portrait_dic") String repoPortraitJsonStr,
-                                                             @RequestParam("kwargs") String kwargsJsonStr) {
-        List<Map<String, Object>> recoRecordList;
-        try {
-            recoRecordList = githubService.recommendPackagesExperiment(repoPortraitJsonStr, kwargsJsonStr);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseSimpleFactory.createResponse(e.getMessage());
-        }
-/*        List<String> recoPackageList = new ArrayList<>();
-        for (Map<String, Object> record : recoRecordList) {
-            recoPackageList.add(((String) record.get("nameWithManager")));
-        }*/
-        return ResponseSimpleFactory.createDataSuccessResponse(recoRecordList);
-    }
 
     @RequestMapping(path = "/refactor/repo_co_package_repo", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory refactorRepoCoPackageRepo(@RequestParam("nameWithManager") String nameWithManager) {
@@ -60,23 +39,6 @@ public class GithubController {
         return ResponseSimpleFactory.createSimpleResponse("ok");
     }
 
-
-    @RequestMapping(path = "/recommend/package", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseSimpleFactory recommendPackages(@RequestParam("json_str") String jsonStr,
-                                                   @RequestParam int pageNum,
-                                                   @RequestParam int pageSize) {
-        Page<DependencyPackage> page;
-        try {
-            page = githubService.recommendPackages(jsonStr, pageNum, pageSize);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseSimpleFactory.createResponse(e.getMessage());
-        }
-        if (page.getTotal() == 0) {
-            return ResponseSimpleFactory.createResponse("no recommend packages");
-        }
-        return ResponseSimpleFactory.createDataSuccessResponse(page);
-    }
 
     @RequestMapping(path = "/delete/depends_on", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseSimpleFactory deleteRepoDependsOnPackage(@RequestParam("nameWithOwner") String nameWithOwner,

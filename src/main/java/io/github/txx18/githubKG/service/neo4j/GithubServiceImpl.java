@@ -4,22 +4,13 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jayway.jsonpath.JsonPath;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GithubMapper;
-import io.github.txx18.githubKG.mapper.GraphMapper;
-import io.github.txx18.githubKG.model.DependencyPackage;
-import io.github.txx18.githubKG.model.Page;
 import io.github.txx18.githubKG.service.GithubService;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * @author ShaneTang
@@ -30,83 +21,11 @@ public class GithubServiceImpl implements GithubService {
 
     private final GithubMapper githubMapper;
 
-    private final GraphMapper graphMapper;
 
-    public GithubServiceImpl(GithubMapper githubMapper, GraphMapper graphMapper) {
+    public GithubServiceImpl(GithubMapper githubMapper) {
         this.githubMapper = githubMapper;
-        this.graphMapper = graphMapper;
     }
 
-
-    @Override
-    public List<Map<String, Object>> recommendPackagesExperiment(String repoPortraitJsonStr, String kwargsJsonStr) throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        Map<String, Object> repoPortraitMap = objectMapper.readValue(repoPortraitJsonStr, Map.class);
-        String nameWithOwner = (String) repoPortraitMap.get("nameWithOwner");
-        List<Map<String, Object>> dependencyMapList = (List<Map<String, Object>>) repoPortraitMap.get("dependency_dic_list");
-//        List<Map<String, Object>> dependencyMapList = JsonPath.read(jsonStr, "$.*"); // dependedTF被转成了BigDecimal
-        List<String> dependencyNameList = new ArrayList<>();
-        for (Map<String, Object> map : dependencyMapList) {
-            dependencyNameList.add(((String) map.get("nameWithManager")).replaceAll("\\s*", ""));
-        }
-        Map<String, Object> kwargsMap = objectMapper.readValue(kwargsJsonStr, Map.class);
-        String recoMethod = (String) kwargsMap.get("reco_method");
-        int topN = (int) kwargsMap.get("topN");
-        int UCF_KNN = (int) kwargsMap.get("UCF_KNN");
-        List<Map<String, Object>> res;
-        switch (recoMethod) {
-            case "ICF":
-                res = graphMapper.recommendPackagesExperimentICF(nameWithOwner, dependencyNameList, dependencyMapList
-                        , topN);
-                return res;
-            case "UCF":
-                res = graphMapper.recommendPackagesExperimentUCF(nameWithOwner, dependencyNameList, dependencyMapList
-                        , topN, UCF_KNN);
-                return res;
-            case "Popular":
-                res = graphMapper.recommendPackagesExperimentPopular(dependencyNameList, topN);
-                return res;
-            case "Graph":
-                // 对于不在图中的用户，先需要计算出自己的 xxxRepoIDFQuadraticSum，也就需要先找到图中的那些画像的xxx
-                // 目前验证集没有package的关联，但其他关联还保留，方便实验，所以目前只用找package
-                res = graphMapper.recommendPackagesExperimentGraph(nameWithOwner, dependencyNameList, dependencyMapList, topN, UCF_KNN);
-                return res;
-            case "Random":
-                res = graphMapper.recommendPackagesExperimentRandom(dependencyNameList, topN);
-                return res;
-            default:
-                throw new Exception("没有选择推荐方法！");
-        }
-    }
-
-
-    @Override
-    public Page<DependencyPackage> recommendPackages(String jsonStr, int pageNum, int pageSize) throws DAOException {
-        Page<DependencyPackage> page = new Page<>();
-        List<Object> dependencyNodes = JsonPath.read(jsonStr, "data.repository" +
-                ".dependencyGraphManifests.nodes[*].dependencies.nodes[*]");
-        double totalDependencyCount = dependencyNodes.size();
-        Map<String, Double> dependencyCountMap = new HashMap<>();
-        // 完成去重、统计
-        for (Object dependencyNode : dependencyNodes) {
-            Map<String, Object> map = (Map<String, Object>) dependencyNode;
-            String nameWithManager = (map.get("packageManager") + "/" + map.get("packageName")).replaceAll("\\s*", "");
-            dependencyCountMap.put(nameWithManager, dependencyCountMap.getOrDefault(nameWithManager, (double) 0) + 1);
-        }
-        // 计算TF
-        dependencyCountMap.replaceAll((k, v) -> dependencyCountMap.get(k) / totalDependencyCount);
-        List<String> dependencyNameList = new ArrayList<>(dependencyCountMap.keySet());
-        // 换一种mapList的格式存储
-        List<Map<String, Object>> dependencyMapList = new ArrayList<>(dependencyCountMap.size());
-        for (Map.Entry<String, Double> entry : dependencyCountMap.entrySet()) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("nameWithManager", entry.getKey());
-            map.put("dependedTF", entry.getValue());
-            dependencyMapList.add(map);
-        }
-        List<String> res = githubMapper.recommendPackages(dependencyNameList, dependencyMapList, pageNum, pageSize);
-        return page;
-    }
 
     @Override
     public String refactorRepoCoPackageRepo(String nameWithManager) throws DAOException {
