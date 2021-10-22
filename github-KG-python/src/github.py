@@ -10,8 +10,9 @@ from gensim import models, similarities
 from gensim.corpora import Dictionary
 from sentence_transformers import SentenceTransformer, util
 
-from data import split_portrait_train_test_by_count, split_train_test_dic_by_relation, split_model_validation_repo_dic, get_split_corpus
-from gensim_process import trans_single_doc
+from data import split_portrait_train_test_by_count, split_train_test_dic_by_relation, split_model_validation_repo_dic
+from nlp.gensim_process import trans_single_doc
+from nlp.pre_process import get_split_corpus
 from util.FileUtils import *
 from util.utils import *
 

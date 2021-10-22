@@ -1,7 +1,7 @@
 # spacy for lemmatization
+import en_core_web_sm
 import logging
 
-import en_core_web_sm
 from gensim.utils import simple_preprocess
 from nltk.corpus import stopwords
 

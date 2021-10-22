@@ -78,7 +78,7 @@ SET subtask.description = $description
 MERGE (task)-[has_subtask:TASK_HAS_SUBTASK]->(subtask)
   ON CREATE SET has_subtask.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET has_subtask.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')*/
-// 第二种思路：只保留Task
+// 第二种思路：把subTask也看作Task
 MATCH (task:Task {name: $taskName})
 MERGE (subtask:Task {name: $subtaskName})
   ON CREATE SET subtask.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -88,7 +88,8 @@ MERGE (task)-[has_subtask:TASK_HAS_SUBTASK]->(subtask)
   ON CREATE SET has_subtask.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET has_subtask.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 
-
+// todo Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
+// todo Task - TASK_HAS_PAPER -> Paper
 
 
 
