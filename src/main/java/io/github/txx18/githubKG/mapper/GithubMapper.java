@@ -11,7 +11,7 @@ public interface GithubMapper {
 
     int mergeRepoOwner(JSONObject repository) throws DAOException;
 
-    int mergeRepoTopic(JSONObject repository, JSONObject topicNode) throws DAOException;
+    String mergeRepoTopic(String nameWithOwner, String topicName) throws DAOException;
 
     int mergeRepoLanguage(JSONObject repository, JSONObject languageNode, JSONObject languageEdge) throws DAOException;
 

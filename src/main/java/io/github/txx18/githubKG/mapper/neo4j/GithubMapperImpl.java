@@ -302,8 +302,10 @@ public class GithubMapperImpl implements GithubMapper {
 
     @Override
     public int mergeRepoOwner(JSONObject repository) throws DAOException {
-        String query = "// Repository - REPO_BELONGS_TO_OWNER -> Owner\n" +
-                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+        String query = "// 【关系】 Repository - REPO_BELONGS_TO_OWNER -> Owner\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (owner:Owner {login: $login})\n" +
                 "  ON CREATE SET owner.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET owner.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -327,9 +329,11 @@ public class GithubMapperImpl implements GithubMapper {
     }
 
     @Override
-    public int mergeRepoTopic(JSONObject repository, JSONObject topicNode) throws DAOException {
-        String query = "// Repository - REPO_UNDER_TOPIC -> Topic\n" +
-                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+    public String mergeRepoTopic(String nameWithOwner, String topicName) throws DAOException {
+        String query = "// 【关系】 Repository - REPO_UNDER_TOPIC -> Topic\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (topic:Topic {name: $topicName})\n" +
                 "  ON CREATE SET topic.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET topic.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -339,8 +343,8 @@ public class GithubMapperImpl implements GithubMapper {
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
                 tx.run(query, parameters(
-                        "nameWithOwner", ((String) repository.get("nameWithOwner")).replaceAll("\\s*", ""),
-                        "topicName", ((String) ((JSONObject) topicNode.get("topic")).get("name")).trim()
+                        "nameWithOwner", nameWithOwner,
+                        "topicName", topicName
                 ));
                 return 1;
             });
@@ -349,13 +353,15 @@ public class GithubMapperImpl implements GithubMapper {
             logger.error(log, e);
             throw new DAOException(log);
         }
-        return 1;
+        return "success";
     }
 
     @Override
     public int mergeRepoLanguage(JSONObject repository, JSONObject languageNode, JSONObject languageEdge) throws DAOException {
-        String query = "// Repository - REPO_USES_LANGUAGE -> Language\n" +
-                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+        String query = "// 【关系】 Repository - REPO_USES_LANGUAGE -> Language\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (lang:Language {name: $languageName})\n" +
                 "  ON CREATE SET lang.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET lang.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -431,9 +437,10 @@ public class GithubMapperImpl implements GithubMapper {
 
     @Override
     public int mergeRepoDependsOnPackage(JSONObject repository, JSONObject dependencyGraphManifestNode, JSONObject dependencyNode) throws DAOException {
-        String query = "// Repository - REPO_DEPENDS_ON_PACKAGE -> Package\n" +
-                "// 其实中间还有个dependencyGraphManifests层级，但是作简略处理\n" +
-                "MATCH (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+        String query = "// 【关系】 Repository - REPO_DEPENDS_ON_PACKAGE -> Package\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE(package:Package {nameWithManager: $packageNameWithManager})\n" +
                 "  ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -471,6 +478,7 @@ public class GithubMapperImpl implements GithubMapper {
         return 1;
     }
 
+    @Deprecated
     @Override
     public int mergeRepoDependsOnRepo(JSONObject repository, JSONObject dependencyNode) throws DAOException {
         String query = "// Repository - REPO_DEPENDS_ON_REPO -> Repository\n" +
@@ -501,8 +509,10 @@ public class GithubMapperImpl implements GithubMapper {
 
     @Override
     public int mergeRepoDevelopsPackage(JSONObject dependencyNode) throws DAOException {
-        String query = "// Repository - REPO_DEVELOPS_PACKAGE -> Package\n" +
-                "MATCH (package:Package {nameWithManager: $packageNameWithManager})\n" +
+        String query = "// 【关系】 Repository - REPO_DEVELOPS_PACKAGE -> Package\n" +
+                "MERGE (package:Package {nameWithManager: $packageNameWithManager})\n" +
+                "  ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (dev_repo:Repository {nameWithOwner: $devRepoNameWithOwner})\n" +
                 "  ON CREATE SET dev_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET dev_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -527,6 +537,7 @@ public class GithubMapperImpl implements GithubMapper {
         return 1;
     }
 
+    @Deprecated
     @Override
     public int mergePackageDependsOnPackage(JSONObject dependencyNode) throws DAOException {
         String query = "// Package - PACKAGE_DEPENDS_ON_PACKAGE -> Package\n" +

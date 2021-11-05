@@ -366,11 +366,16 @@ def load_pwc_json(dir_path):
     links_between_papers_and_code = read_json_file(os.path.join(dir_path, 'links-between-papers-and-code.json'))
     methods = read_json_file(os.path.join(dir_path, 'methods.json'))
     papers_with_abstracts = read_json_file(os.path.join(dir_path, 'papers-with-abstracts.json'))
+    datasets = None
+    if os.path.exists(os.path.join(dir_path, 'datasets.json')):
+        datasets = read_json_file(os.path.join(dir_path, 'datasets.json'))
     return {"evaluation-tables": evaluation_tables,
             "links_between_papers_and_code": links_between_papers_and_code,
             "methods": methods,
-            "papers_with_abstracts": papers_with_abstracts
+            "papers_with_abstracts": papers_with_abstracts,
+            'datasets': datasets
             }
+
 
 
 def load_repo_dir_jsons(repo_dir_path):

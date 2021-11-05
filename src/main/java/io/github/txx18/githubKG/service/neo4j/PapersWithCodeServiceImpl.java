@@ -69,8 +69,9 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("paperArxivId", paperArxivId);
             params.put("paperUrlAbs", paperUrlAbs);
             params.put("paperUrlPdf", paperUrlPdf);
-            // merge Paper （links-between-papers-and-code.json）
-            int resPaper = papersWithCodeMapper.mergePaperLBPACJson(params);
+            // 【实体】 merge Paper （links-between-papers-and-code.json）
+            System.out.println("merging paper: " + paperTitle);
+            int resPaper = papersWithCodeMapper.mergePaperFromLBPACJson(params);
             String repoUrl = ((String) jsonObject.getOrDefault("repo_url", "")).replaceAll("\\s*", "");
             // repoUrl为空则跳过
             if (StrUtil.isBlankIfStr(repoUrl)) {
@@ -85,8 +86,8 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             Object mentionedInGithub = jsonObject.getOrDefault("mentioned_in_github", "");
             params.put("mentionedInGithub", mentionedInGithub == "" ? -1 : ((boolean) (mentionedInGithub) ? 1 : 0));
             params.put("framework", framework);
-            // Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
-            int res = papersWithCodeMapper.mergePaperRepo(params);
+            // 【关系】 Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
+            int res = papersWithCodeMapper.mergePaperRepoFromLBPACJson(params);
             System.out.println("importLinksBetweenPapersAndCodeJson: " + i + "/" + jsonArray.size());
         }
         return 1;
@@ -113,13 +114,14 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("description", description);
             params.put("codeSnippetUrl", codeSnippetUrl);
             params.put("introducedYear", introducedYear);
-            // merge Method
-            int resMethod = papersWithCodeMapper.mergeMethodMethodsJson(params);
+            // 【实体】 merge Method
+            System.out.println("importing method: " + methodName);
+            int resMethod = papersWithCodeMapper.mergeMethodFromMethodsJson(params);
             String dashPaperTitle = ((String) jsonObject.getOrDefault("paper", "")).trim();
             // introPaperTitle 不为空才执行
             if (!StrUtil.isBlankIfStr(dashPaperTitle)) {
                 params.put("dashPaperTitle", dashPaperTitle);
-                // Method - METHOD_INTRODUCED_IN_PAPER -> Paper
+                //【关系】 Method - METHOD_INTRODUCED_IN_PAPER -> Paper
                 int resMethodPaper = this.mergeMethodIntroInPaper(params);
             }
             JSONArray collections = ((JSONArray) jsonObject.getOrDefault("collections", JSONUtil.createArray()));
@@ -187,7 +189,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("existPaperTitle", existPaperTitle);
             int resMethodPaperExist = papersWithCodeMapper.mergeMethodIntroInPaperExist(params);
         } else {
-            // todo 暂时通过dashTitle获得完整paperTitle还没有比较好的方式，而dashTitle作为paperTitle又不好，所以先不merge了
+            // todo 如果paperTitle不存在 暂时通过dashTitle获得完整 paperTitle 还没有比较好的方式，而dashTitle作为paperTitle又不好，所以先不merge了
 //            int resMethodPaper = papersWithCodeMapper.mergeMethodPaperNotExist(params);
         }
         return 1;
@@ -219,9 +221,10 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             params.put("urlPdf", urlPdf);
             params.put("proceeding", proceeding);
             params.put("date", date);
-            // merge Paper （PWAJson）
-            int resPaper = papersWithCodeMapper.mergePaperPWAJson(params);
-            // Author的同名如果放任merge的话，是一个比较严重的知识错误，因为同名的概率还是挺大的
+            // 【实体】 merge Paper （PWAJson）
+            System.out.println("merging paper: " + paperTitle);
+            int resPaper = papersWithCodeMapper.mergePaperFromPWAJson(params);
+            // todo Author的同名如果放任merge的话，是一个比较严重的知识错误，因为简写同名的概率还是挺大的
             /*JSONArray authors = (JSONArray) jsonObject.getOrDefault("authors", JSONUtil.createArray());
             for (int j = 0; j < authors.size(); j++) {
                 String authorName = (String) authors.get(j);
@@ -241,8 +244,8 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                     continue;
                 }
                 params.put("taskName", taskName);
-                // Task - TASK_HAS_PAPER -> Paper
-                int resTaskPaper = papersWithCodeMapper.mergeTaskPaper(params);
+                // 【关系】 Task - TASK_HAS_PAPER -> Paper
+                int resTaskPaper = papersWithCodeMapper.mergeTaskPaperFromPWAJson(params);
             }
             JSONArray methods = (JSONArray) jsonObject.getOrDefault("methods", JSONUtil.createArray());
             for (int j = 0; j < methods.size(); j++) {
@@ -259,8 +262,8 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("description", description);
                 params.put("codeSnippetUrl", codeSnippetUrl);
                 params.put("introducedYear", jsonObject.getOrDefault("introduced_year", ""));
-                // merge Method （papers-with-abstracts.json）
-                int resMethod = papersWithCodeMapper.mergeMethodPWAJson(params);
+                // 【实体】 merge Method （papers-with-abstracts.json）
+                int resMethod = papersWithCodeMapper.mergeMethodFromPWAJson(params);
                 // Paper - Paper_USES_METHOD -> Method
                 int resPaperMethod = papersWithCodeMapper.mergePaperUsesMethod(params);
                 JSONObject collection = (JSONObject) method.getOrDefault("main_collection", JSONUtil.createObj());
@@ -306,6 +309,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             }
             int resTaskCategory = mergeCategoryTask(jsonObject);
             int resDataset = mergeDatasetUnion(jsonObject);
+            // 递归嵌套
             int resSubtask = mergeSubtaskUnion(jsonObject);
             System.out.println("mergeTaskUnion: " + i + "/" + jsonArray.size());
         }
@@ -318,8 +322,10 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 "rows", JSONUtil.createArray());
         String datasetName = (String) dataset.getOrDefault("dataset", "");
         for (int i = 0; i < rows.size(); i++) {
-            JSONObject model = (JSONObject) rows.get(i);
-            String modelName = ((String) model.getOrDefault("model_name", "")).trim();
+            JSONObject row = (JSONObject) rows.get(i);
+            String modelName = ((String) row.getOrDefault("model_name", "")).trim();
+            // 即将merge的paper和repo是平级的，不能随便卫语句跳出for循环，不然另一个就被忽略了，通过单if语句控制逻辑
+            String paperTitle = ((String) row.getOrDefault("paper_title", "")).trim();
             // modelName为空则跳过
             if (StrUtil.isBlankIfStr(modelName)) {
                 continue;
@@ -328,10 +334,12 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             if (!StrUtil.isBlankIfStr(taskName)) {
                 params.put("taskName", taskName);
                 params.put("modelName", modelName);
-                // Task - TASK_HAS_MODEL -> Model
-                int res1 = papersWithCodeMapper.mergeTaskModel(params);
+                // 【关系】 Task - TASK_HAS_MODEL -> Model
+                int resMergeTaskModel = papersWithCodeMapper.mergeTaskModel(params);
+                // 【关系】 Task - TASK_HAS_PAPER -> Paper
+                String resMergeTaskPaper = papersWithCodeMapper.mergeTaskPaperFromETJson(taskName, paperTitle);
             }
-            JSONObject metrics = (JSONObject) model.getOrDefault("metrics", JSONUtil.createObj());
+            JSONObject metrics = (JSONObject) row.getOrDefault("metrics", JSONUtil.createObj());
             Set<Map.Entry<String, Object>> metricEntries = metrics.entrySet();
             params.put("datasetName", datasetName);
             for (Map.Entry<String, Object> metricEntry : metricEntries) {
@@ -340,22 +348,20 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("metricName", metricName);
                 params.put("metricValue", metricValue);
                 // model&dataset都保证存在，顺便merge了model
-                // Model - MODEL_ON_DATASET -> Dataset
+                // 【关系】 Model - MODEL_ON_DATASET -> Dataset
                 int res2 = papersWithCodeMapper.createModelMetricDataset(params);
             }
-            // 即将merge的paper和repo是平级的，不能随便卫语句跳出for循环，不然另一个就被忽略了，通过单if语句控制逻辑
-            String paperTitle = ((String) model.getOrDefault("paper_title", "")).trim();
             // paper不为空才执行这一段，否则继续执行repo段
             if (!StrUtil.isBlankIfStr(paperTitle)) {
-                String paperUrl = (String) model.getOrDefault("paper_url", "");
-                String paperDate = (String) model.getOrDefault("paper_date", "");
+                String paperUrl = (String) row.getOrDefault("paper_url", "");
+                String paperDate = (String) row.getOrDefault("paper_date", "");
                 params.put("paperTitle", paperTitle);
                 params.put("paperUrl", paperUrl);
                 params.put("paperDate", paperDate);
-                // Model - MODEL_INTRODUCED_IN_PAPER -> Paper
+                // 【关系】 Model - MODEL_INTRODUCED_IN_PAPER -> Paper
                 int res3 = papersWithCodeMapper.mergeModelPaper(params);
             }
-            JSONArray codeLinks = (JSONArray) model.getOrDefault("code_links", JSONUtil.createArray());
+            JSONArray codeLinks = (JSONArray) row.getOrDefault("code_links", JSONUtil.createArray());
             for (int j = 0; j < codeLinks.size(); j++) {
                 JSONObject codeLink = (JSONObject) codeLinks.get(j);
                 // title字段就是nameWithOwner，还有个url字段和github数据是一样的
@@ -363,9 +369,12 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 // repo为空则跳过
                 if (!StrUtil.isBlankIfStr(nameWithOwner)) {
                     params.put("nameWithOwner", nameWithOwner);
-                    params.put("githubUrl", codeLink.getOrDefault("url", ""));
-                    // Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
+                    String githubUrl = (String) codeLink.getOrDefault("url", "");
+                    params.put("githubUrl", githubUrl);
+                    // 【关系】 Model - MODEL_IMPLEMENTED_BY_REPO -> Repo
                     int res4 = papersWithCodeMapper.mergeModelRepo(params);
+                    // 【+关系】 Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
+                    String mergePaperRepo = papersWithCodeMapper.mergePaperRepoFromETJson(paperTitle, nameWithOwner, githubUrl);
                 }
             }
         }
@@ -393,7 +402,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
                 params.put("taskName", taskName);
                 params.put("datasetName", datasetName);
                 params.put("description", description);
-                // Task - TASK_HAS_DATASET -> Dataset
+                // 【关系】 Task - TASK_HAS_DATASET -> Dataset
                 int res = papersWithCodeMapper.mergeTaskDataset(params);
             }
             // 嵌套关系，如果要分方法写的话，也嵌套调用
@@ -448,6 +457,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
         HashMap<String, Object> params = new HashMap<>();
         params.put("taskName", taskName);
         params.put("description", description);
+        // 【实体】 Task
         int resTask = papersWithCodeMapper.mergeTask(params);
         JSONArray categories = (JSONArray) jsonObject.getOrDefault("categories", JSONUtil.createArray());
         // 对于subtask，categories字段是[]，Jackson解析为size为0的JSONArray
@@ -455,7 +465,7 @@ public class PapersWithCodeServiceImpl implements PapersWithCodeService {
             String category = ((String) categories.get(j)).trim();
             if (!StrUtil.isBlankIfStr(category)) {
                 params.put("category", category);
-                // Category - CATEGORY_HAS_TASK -> Task
+                // 【关系】 Category - CATEGORY_HAS_TASK -> Task
                 int resCategoryTask = papersWithCodeMapper.mergeCategoryTask(params);
             }
         }

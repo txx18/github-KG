@@ -33,8 +33,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeCategoryTask(Map<String, Object> params) throws DAOException {
-        String query = "// Category - CATEGORY_HAS_TASK -> Task\n" +
-                "MATCH (task:Task {name: $taskName})\n" +
+        String query = "// 【关系】 Category - CATEGORY_HAS_TASK -> Task\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (category:Category {name: $category})\n" +
                 "  ON CREATE SET category.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET category.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -59,7 +61,11 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeTaskSubtask(Map<String, Object> params) throws DAOException {
-        String query = "MATCH (task:Task {name: $taskName})\n" +
+        String query = "// 第二种思路：把 subTask 也看作 Task\n" +
+                "// 【关系】 Task - TASK_HAS_SUBTASK -> Subtask\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (subtask:Task {name: $subtaskName})\n" +
                 "  ON CREATE SET subtask.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET subtask.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -86,8 +92,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeTaskDataset(Map<String, Object> params) throws DAOException {
-        String query = "// Task 和 Dataset的关系\n" +
-                "MATCH (task:Task {name: $taskName})\n" +
+        String query = "// 【关系】 Task - TASK_HAS_DATASET -> Dataset\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (dataset:Dataset {name: $datasetName})\n" +
                 "  ON CREATE SET dataset.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET dataset.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -114,11 +122,18 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int createModelMetricDataset(HashMap<String, Object> params) throws DAOException {
-        String query = "MATCH (dataset:Dataset {name: $datasetName})\n" +
+        String query = "// 【关系】 Model - MODEL_ON_DATASET -> Dataset\n" +
+                "MERGE (dataset:Dataset {name: $datasetName})\n" +
+                "  ON CREATE SET dataset.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET dataset.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (model:Model {name: $modelName})\n" +
+                "  ON CREATE SET model.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET model.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "// 把metric作为 Dataset & Model之间属性 最后有几个metric就插入几条关系\n" +
                 "MERGE (model)-[model_on_dataset:MODEL_ON_DATASET {metricName: $metricName}]->(dataset)\n" +
                 "  ON CREATE SET model_on_dataset.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET model_on_dataset.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "// 有的含有%之类的，所以设为string类型\n" +
                 "SET model_on_dataset.metricValue = $metricValue";
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
@@ -141,8 +156,11 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeModelPaper(HashMap<String, Object> params) throws DAOException {
-        String query = "// model - MODEL_INTRODUCED_IN_PAPER -> paper\n" +
-                "MATCH (model:Model {name: $modelName})\n" +
+        String query = "// 【实体】 Paper\n" +
+                "// 【关系】 Model - MODEL_INTRODUCED_IN_PAPER -> Paper\n" +
+                "MERGE (model:Model {name: $modelName})\n" +
+                "  ON CREATE SET model.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET model.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -172,8 +190,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeTaskModel(HashMap<String, Object> params) throws DAOException {
-        String query = "//Task & Model 的关系\n" +
-                "MATCH (task:Task {name: $taskName})\n" +
+        String query = "// 【关系】 Task - TASK_HAS_MODEL -> Model\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (model:Model {name: $modelName})\n" +
                 "  ON CREATE SET model.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET model.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -198,8 +218,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeModelRepo(Map<String, Object> params) throws DAOException {
-        String query = "// Model - MODEL_IMPLEMENTED_BY_REPO -> Repo\n" +
-                "MATCH (model:Model {name: $modelName})\n" +
+        String query = "// 【关系】 Model - MODEL_IMPLEMENTED_BY_REPO -> Repo\n" +
+                "MERGE (model:Model {name: $modelName})\n" +
+                "  ON CREATE SET model.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET model.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
                 "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -226,10 +248,15 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergePaperRepo(Map<String, Object> params) throws DAOException {
-        String query = "// Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
-                "// 这里大坑，url截取的可能有大小写错误导致match不到，可以不区分大小写\n" +
-                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
+    public int mergePaperRepoFromLBPACJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【关系】 Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
+                "// todo 这里有坑，url截取的可能有大小写错误导致match不到\n" +
+                "// 可以不区分大小写，所以这里想match repo的话就必须先导入 github\n" +
+                "// 这种情况merge repo也不好因为怕大小写不对，后面github merge 不到，只能match\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "WITH paper\n" +
                 "MATCH (repo:Repository)\n" +
                 "  WHERE repo.nameWithOwner =~ '(?i)' + $nameWithOwner\n" +
                 "MERGE (paper)-[link:PAPER_IMPLEMENTED_BY_REPO]->(repo)\n" +
@@ -307,8 +334,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergePaperLBPACJson(Map<String, Object> params) throws DAOException {
-        String query = "// Paper\n" +
+    public int mergePaperFromLBPACJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【实体】Paper （links-between-papers-and-code.json）\n" +
                 "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -336,8 +363,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergeMethodMethodsJson(Map<String, Object> params) throws DAOException {
-        String query = "// Method\n" +
+    public int mergeMethodFromMethodsJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【实体】 Method （methods.json）\n" +
                 "MERGE (method:Method {name: $methodName})\n" +
                 "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -368,8 +395,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeCollectionMethod(Map<String, Object> params) throws DAOException {
-        String query = "// Collection - COLLECTION_HAS_METHOD -> Method\n" +
-                "MATCH (method:Method {name: $methodName})\n" +
+        String query = "// 【关系】 Collection - COLLECTION_HAS_METHOD -> Method\n" +
+                "MERGE (method:Method {name: $methodName})\n" +
+                "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (coll:Collection {name: $collectionName})\n" +
                 "  ON CREATE SET coll.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET coll.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -394,8 +423,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeAreaCollection(Map<String, Object> params) throws DAOException {
-        String query = "// Area - AREA_HAS_COLLECTION -> Collection\n" +
-                "MATCH (coll:Collection {name: $collectionName})\n" +
+        String query = "// 【关系】 Area - AREA_HAS_COLLECTION -> Collection\n" +
+                "MERGE (coll:Collection {name: $collectionName})\n" +
+                "  ON CREATE SET coll.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET coll.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (area:Area {area: $areaName})\n" +
                 "  ON CREATE SET area.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET area.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -421,8 +452,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergePaperPWAJson(Map<String, Object> params) throws DAOException {
-        String query = "// Paper （PWAJson）\n" +
+    public int mergePaperFromPWAJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【实体】 Paper （papers-with-abstracts.json）\n" +
                 "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
                 "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -455,36 +486,13 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
         return 1;
     }
 
-    @Override
-    public int mergePaperAuthor(Map<String, Object> params) throws DAOException {
-        String query = "// Paper - PAPER_WRITTEN_BY_AUTHOR -> Author\n" +
-                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
-                "MERGE (author:Author {name: $authorName})\n" +
-                "  ON CREATE SET author.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET author.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "MERGE (paper)-[written:PAPER_WRITTEN_BY_AUTHOR]->(author)\n" +
-                "  ON CREATE SET written.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
-                "SET written.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
-        try (Session session = driver.session()) {
-            session.writeTransaction(tx -> {
-                tx.run(query, parameters(
-                        "paperTitle", params.get("paperTitle"),
-                        "authorName", params.get("authorName")
-                ));
-                return 1;
-            });
-        } catch (Exception e) {
-            String log = "mergePaperAuthor failed! paper: " + params.get("paperTitle") + " - author: " + params.get("authorName");
-            logger.error(log, e);
-            throw new DAOException(log);
-        }
-        return 1;
-    }
 
     @Override
-    public int mergeTaskPaper(Map<String, Object> params) throws DAOException {
-        String query = "// Task - TASK_HAS_PAPER -> Paper\n" +
-                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
+    public int mergeTaskPaperFromPWAJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【关系】【重叠1】Task - TASK_HAS_PAPER -> Paper\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (task:Task {name: $taskName})\n" +
                 "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -508,8 +516,8 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     }
 
     @Override
-    public int mergeMethodPWAJson(Map<String, Object> params) throws DAOException {
-        String query = "// Method （papers-with-abstracts.json）\n" +
+    public int mergeMethodFromPWAJson(Map<String, Object> params) throws DAOException {
+        String query = "// 【实体】【重叠3】Method （papers-with-abstracts.json）\n" +
                 "MERGE (method:Method {name: $methodName})\n" +
                 "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -538,8 +546,10 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergeMethodMainCollection(Map<String, Object> params) throws DAOException {
-        String query = "// Method - Method_MAIN_UNDER_COLLECTION -> Collection\n" +
-                "MATCH (method:Method {name: $methodName})\n" +
+        String query = "// 【关系】 Method - METHOD_MAIN_UNDER_COLLECTION -> Collection\n" +
+                "MERGE (method:Method {name: $methodName})\n" +
+                "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (coll:Collection {name: $collectionName})\n" +
                 "  ON CREATE SET coll.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET coll.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -589,8 +599,12 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
     @Override
     public int mergeMethodIntroInPaperExist(Map<String, Object> params) throws DAOException {
         String query = "// if paper exist\n" +
-                "MATCH (method:Method {name: $methodName})\n" +
+                "MERGE (method:Method {name: $methodName})\n" +
+                "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (paper:Paper {paperTitle: $existPaperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET paper.dashPaperTitle = $dashPaperTitle\n" +
                 "MERGE (method)-[intro:METHOD_INTRODUCED_IN_PAPER]->(paper)\n" +
                 "  ON CREATE SET intro.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
@@ -615,9 +629,13 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
 
     @Override
     public int mergePaperUsesMethod(Map<String, Object> params) throws DAOException {
-        String query = "// Paper - PAPER_USES_METHOD -> Method\n" +
-                "MATCH (paper:Paper {paperTitle: $paperTitle})\n" +
-                "MATCH (method:Method {name: $methodName})\n" +
+        String query = "// 【关系】 Paper - PAPER_USES_METHOD -> Method\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (method:Method {name: $methodName})\n" +
+                "  ON CREATE SET method.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET method.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "MERGE (paper)-[use:PAPER_USES_METHOD]-(method)\n" +
                 "  ON CREATE SET use.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
                 "SET use.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
@@ -637,5 +655,63 @@ public class PapersWithCodeMapperImpl implements PapersWithCodeMapper {
             throw new DAOException(log);
         }
         return 1;
+    }
+
+    @Override
+    public String mergeTaskPaperFromETJson(String taskName, String paperTitle) throws DAOException {
+        String query = "//【+关系】 Task - TASK_HAS_PAPER -> Paper\n" +
+                "MERGE (task:Task {name: $taskName})\n" +
+                "  ON CREATE SET task.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET task.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (task)-[predicate:TASK_HAS_PAPER]->(paper)\n" +
+                "  ON CREATE SET predicate.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET predicate.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "taskName", taskName,
+                        "paperTitle", paperTitle
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergeTaskPaperFromETJson failed! task: " + taskName + " - paperTitle: " + paperTitle;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "success";
+    }
+
+    @Override
+    public String mergePaperRepoFromETJson(String paperTitle, String nameWithOwner, String githubUrl) throws DAOException {
+        String query = "// 【+关系】 Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo\n" +
+                "MERGE (paper:Paper {paperTitle: $paperTitle})\n" +
+                "  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "MERGE (repo:Repository {nameWithOwner: $nameWithOwner})\n" +
+                "  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET repo.githubUrl = $githubUrl\n" +
+                "MERGE (paper)-[predicate:PAPER_IMPLEMENTED_BY_REPO]->(repo)\n" +
+                "  ON CREATE SET predicate.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')\n" +
+                "SET predicate.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')";
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run(query, parameters(
+                        "paperTitle", paperTitle,
+                        "nameWithOwner", nameWithOwner,
+                        "githubUrl", githubUrl
+                ));
+                return 1;
+            });
+        } catch (Exception e) {
+            String log = "mergePaperRepoFromETJson failed! paperTitle: " + paperTitle + " - nameWithOwner: " + nameWithOwner;
+            logger.error(log, e);
+            throw new DAOException(log);
+        }
+        return "success";
     }
 }

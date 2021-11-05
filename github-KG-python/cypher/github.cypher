@@ -66,7 +66,7 @@ MERGE (pack1)-[co1:PACKAGE_CO_OCCUR_PACKAGE]-(pack2) // 注意这里不能带箭
   ON MATCH SET co1.coOccurrenceCount = (co1.coOccurrenceCount + 1)
 SET co1.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 
-// Repository
+// 【实体】 Repository
 MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
   ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -130,8 +130,10 @@ SET repo.url = $url
 SET repo.vulnerabilityAlertTotalCount = $vulnerabilityAlertTotalCount
 SET repo.watcherTotalCount = $watcherTotalCount
 
-// Repository - REPO_BELONGS_TO_OWNER -> Owner
-MATCH (repo:Repository {nameWithOwner: $nameWithOwner})
+// 【关系】 Repository - REPO_BELONGS_TO_OWNER -> Owner
+MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
+  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 MERGE (owner:Owner {login: $login})
   ON CREATE SET owner.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET owner.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -139,8 +141,11 @@ MERGE (repo)-[belong:REPO_BELONGS_TO_OWNER]->(owner)
   ON CREATE SET belong.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET belong.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 
-// Repository - REPO_UNDER_TOPIC -> Topic
-MATCH (repo:Repository {nameWithOwner: $nameWithOwner})
+// todo github 的 topic 似乎已经都是小写了，简单的对齐方法应该是基本预处理那一套
+// 【关系】 Repository - REPO_UNDER_TOPIC -> Topic
+MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
+  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 MERGE (topic:Topic {name: $topicName})
   ON CREATE SET topic.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET topic.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -148,8 +153,10 @@ MERGE (repo)-[under:REPO_UNDER_TOPIC]->(topic)
   ON CREATE SET under.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET under.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 
-// Repository - REPO_USES_LANGUAGE -> Language
-MATCH (repo:Repository {nameWithOwner: $nameWithOwner})
+// 【关系】 Repository - REPO_USES_LANGUAGE -> Language
+MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
+  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 MERGE (lang:Language {name: $languageName})
   ON CREATE SET lang.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET lang.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -160,9 +167,12 @@ SET uses.size = $size
 
 // dependency的一些关系要注意merge的先后次序
 
-// Repository - REPO_DEPENDS_ON_PACKAGE -> Package
 // 其实中间还有个dependencyGraphManifests层级，但是作简略处理
-MATCH (repo:Repository {nameWithOwner: $nameWithOwner})
+// 【实体】 Package
+// 【关系】 Repository - REPO_DEPENDS_ON_PACKAGE -> Package
+MERGE (repo:Repository {nameWithOwner: $nameWithOwner})
+  ON CREATE SET repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 MERGE(package:Package {nameWithManager: $packageNameWithManager})
   ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
@@ -177,15 +187,10 @@ SET depends_package.filename = $filename
 SET depends_package.parseable = $parseable
 SET depends_package.requirements = $requirements
 
-// Repository - REPO_DEVELOPS_PACKAGE -> Package
-/*
-// 这种方式在插入repo时遗漏了dev_repo
-MATCH (dst_repo:Repository {nameWithOwner: $dstRepoNameWithOwner})
-MATCH (package:Package {nameWithManager: $packageNameWithManager})
-MERGE (dst_repo)-[develops:REPO_DEVELOPS_PACKAGE]->(package)
-  ON CREATE SET develops.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
-SET develops.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')*/
-MATCH (package:Package {nameWithManager: $packageNameWithManager})
+// 【关系】 Repository - REPO_DEVELOPS_PACKAGE -> Package
+MERGE (package:Package {nameWithManager: $packageNameWithManager})
+  ON CREATE SET package.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET package.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 MERGE (dev_repo:Repository {nameWithOwner: $devRepoNameWithOwner})
   ON CREATE SET dev_repo.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET dev_repo.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
