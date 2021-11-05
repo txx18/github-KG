@@ -7,6 +7,7 @@ import cn.hutool.json.JSONUtil;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GithubMapper;
 import io.github.txx18.githubKG.service.GithubService;
+import io.github.txx18.githubKG.util.NLPUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -81,7 +82,7 @@ public class GithubServiceImpl implements GithubService {
         String nameWithOwner = ((String) repository.getOrDefault("nameWithOwner", "")).replaceAll("\\s*", "");
         System.out.println("inserting repo: " + nameWithOwner);
         if (!StrUtil.isBlankIfStr(nameWithOwner)) {
-            // merger Repository
+            // 【实体】 merger Repository
             int resRepo = mergeRepo(repository);
         } else {
             return 1;
@@ -90,7 +91,7 @@ public class GithubServiceImpl implements GithubService {
         String login = ((String) ((JSONObject) repository.getOrDefault("owner", JSONUtil.createObj())).getOrDefault(
                 "login", "")).replaceAll("\\s*", "");
         if (!StrUtil.isBlankIfStr(login)) {
-            // Repository - REPO_BELONGS_TO_OWNER -> Owner
+            // 【关系】 Repository - REPO_BELONGS_TO_OWNER -> Owner
             int resRepoOwner = githubMapper.mergeRepoOwner(repository);
         }
         JSONArray topicNodes =
@@ -103,8 +104,9 @@ public class GithubServiceImpl implements GithubService {
                     ((String) ((JSONObject) topicNode.getOrDefault("topic", JSONUtil.createObj())).getOrDefault(
                             "name", "")).trim();
             if (!StrUtil.isBlankIfStr(topicName)) {
-                // Repository - REPO_UNDER_TOPIC -> Topic
-                int resTopicRepo = githubMapper.mergeRepoTopic(repository, topicNode);
+                // 【关系】 Repository - REPO_UNDER_TOPIC -> Topic
+                String lemmaTopicName = NLPUtils.getLemmaString(topicName);
+                String resTopicRepo = githubMapper.mergeRepoTopic(nameWithOwner, lemmaTopicName);
             }
         }
         JSONArray languageNodes = (JSONArray) ((JSONObject) repository.getOrDefault("languages",

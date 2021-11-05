@@ -1,11 +1,8 @@
 package io.github.txx18.githubKG.service.neo4j;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jayway.jsonpath.JsonPath;
 import io.github.txx18.githubKG.exception.DAOException;
 import io.github.txx18.githubKG.mapper.GraphMapper;
-import io.github.txx18.githubKG.model.DependencyPackage;
-import io.github.txx18.githubKG.model.Page;
 import io.github.txx18.githubKG.model.RecommendRecord;
 import io.github.txx18.githubKG.service.GraphService;
 import org.dmg.pmml.FieldName;
@@ -367,34 +364,4 @@ public class GraphServiceImpl implements GraphService {
                 throw new Exception("没有选择推荐方法！");
         }
     }
-
-    @Override
-    public Page<DependencyPackage> recommendPackages(String jsonStr, int pageNum, int pageSize) throws DAOException {
-        Page<DependencyPackage> page = new Page<>();
-        List<Object> dependencyNodes = JsonPath.read(jsonStr, "data.repository" +
-                ".dependencyGraphManifests.nodes[*].dependencies.nodes[*]");
-        double totalDependencyCount = dependencyNodes.size();
-        Map<String, Double> dependencyCountMap = new HashMap<>();
-        // 完成去重、统计
-        for (Object dependencyNode : dependencyNodes) {
-            Map<String, Object> map = (Map<String, Object>) dependencyNode;
-            String nameWithManager = (map.get("packageManager") + "/" + map.get("packageName")).replaceAll("\\s*", "");
-            dependencyCountMap.put(nameWithManager, dependencyCountMap.getOrDefault(nameWithManager, (double) 0) + 1);
-        }
-        // 计算TF
-        dependencyCountMap.replaceAll((k, v) -> dependencyCountMap.get(k) / totalDependencyCount);
-        List<String> dependencyNameList = new ArrayList<>(dependencyCountMap.keySet());
-        // 换一种mapList的格式存储
-        List<Map<String, Object>> dependencyMapList = new ArrayList<>(dependencyCountMap.size());
-        for (Map.Entry<String, Double> entry : dependencyCountMap.entrySet()) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("nameWithManager", entry.getKey());
-            map.put("dependedTF", entry.getValue());
-            dependencyMapList.add(map);
-        }
-        List<String> res = graphMapper.recommendPackages(dependencyNameList, dependencyMapList, pageNum, pageSize);
-        return page;
-    }
-
-
 }

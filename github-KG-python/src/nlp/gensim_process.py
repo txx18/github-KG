@@ -1,3 +1,4 @@
+# coding=utf-8
 # spacy for lemmatization
 import en_core_web_sm
 import logging

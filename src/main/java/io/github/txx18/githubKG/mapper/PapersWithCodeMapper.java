@@ -21,27 +21,25 @@ public interface PapersWithCodeMapper {
 
     int mergeModelRepo(Map<String, Object> params) throws DAOException;
 
-    int mergePaperRepo(Map<String, Object> params) throws DAOException;
+    int mergePaperRepoFromLBPACJson(Map<String, Object> params) throws DAOException;
 
     int mergeMethodPaperNotExist(Map<String, Object> params) throws DAOException;
 
     int mergeTask(Map<String, Object> params) throws DAOException;
 
-    int mergePaperLBPACJson(Map<String, Object> params) throws DAOException;
+    int mergePaperFromLBPACJson(Map<String, Object> params) throws DAOException;
 
-    int mergeMethodMethodsJson(Map<String, Object> params) throws DAOException;
+    int mergeMethodFromMethodsJson(Map<String, Object> params) throws DAOException;
 
     int mergeCollectionMethod(Map<String, Object> params) throws DAOException;
 
     int mergeAreaCollection(Map<String, Object> params) throws DAOException;
 
-    int mergePaperPWAJson(Map<String, Object> params) throws DAOException;
+    int mergePaperFromPWAJson(Map<String, Object> params) throws DAOException;
 
-    int mergePaperAuthor(Map<String, Object> params) throws DAOException;
+    int mergeTaskPaperFromPWAJson(Map<String, Object> params) throws DAOException;
 
-    int mergeTaskPaper(Map<String, Object> params) throws DAOException;
-
-    int mergeMethodPWAJson(Map<String, Object> params) throws DAOException;
+    int mergeMethodFromPWAJson(Map<String, Object> params) throws DAOException;
 
     int mergeMethodMainCollection(Map<String, Object> params) throws DAOException;
 
@@ -50,4 +48,8 @@ public interface PapersWithCodeMapper {
     int mergeMethodIntroInPaperExist(Map<String, Object> params) throws DAOException;
 
     int mergePaperUsesMethod(Map<String, Object> params) throws DAOException;
+
+    String mergeTaskPaperFromETJson(String taskName, String paperTitle) throws DAOException;
+
+    String mergePaperRepoFromETJson(String paperTitle, String nameWithOwner, String githubUrl) throws DAOException;
 }
