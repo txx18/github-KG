@@ -231,9 +231,11 @@ class GithubAPIv3(object):
 v3 = GithubAPIv3()
 
 
-def get_repo_readme_batch(kwargs):
-    out_dir = kwargs.get('out_dir')
-    target_repo_list = get_target_repo_list(kwargs)
+def get_repo_readme_batch(**kwargs):
+    target = kwargs.get('target')
+    data_file = kwargs.get('target_file').get(target)
+    out_dir = kwargs.get('out_dir').get(target)
+    target_repo_list = get_target_repo_list(target, data_file)
     payload_repo_set = get_payload_repo_set(target_repo_list, out_dir)
     payload_repo_set = sorted(payload_repo_set)
     for index, nameWithOwner in enumerate(payload_repo_set):
@@ -447,12 +449,12 @@ def get_repos_batch(target, **kwargs):
         print("has crawled: " + str(crawled_count) + "/" + str(len(target_repo_set)))
 
 
-def get_target_repo_list(kwargs):
+def get_target_repo_list(target, data_file):
     pattern = re.compile(r'\s+')
-    if kwargs.get('target') == 'links-between-papers-and-code':
+    if target == 'links-between-papers-and-code':
         # 从 2 links-between-papers-and-code 获取 repo_url
-        json_file_path = kwargs.get("json_file_path")
-        json_dic = read_json_file(json_file_path)
+        # json_file_path = kwargs.get("json_file_path")
+        json_dic = read_json_file(data_file)
         repo_url_list = jsonpath.jsonpath(json_dic, "$..repo_url")
         nameWithOwner_list = []
         # 从url提取 ownerWithName, 这里有个坑比如有的url是带分支，所以应该取github.com/后面的 XXX/XXX
@@ -461,13 +463,15 @@ def get_target_repo_list(kwargs):
             nameWithOwner = re.sub(pattern, '', tokens[3] + "/" + tokens[4])
             nameWithOwner_list.append(nameWithOwner)
         return nameWithOwner_list
-    elif kwargs.get('target') == 'dev_repos_csv' or kwargs.get('target') == 'repo_has_model':
-        data_file = kwargs.get('target_file')
+    elif target == 'dev_repos_csv' or target == 'repo_has_model':
         dic_list = pd.read_csv(data_file).to_dict(orient='records')
         repo_dic = defaultdict(list)
         for record in dic_list:
             repo_dic[record['nameWithOwner']].append(record['nameWithManager'])
         return list(repo_dic.keys())
+    elif target == '1785_dataset':
+        df_data = pd.read_csv(data_file)
+        return list(df_data['repo'].apply(lambda x: x[len('Repository_'):]))
 
 
 def get_payload_repo_set(target_repo_list, out_dir_path):

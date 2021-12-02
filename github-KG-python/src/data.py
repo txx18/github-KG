@@ -9,7 +9,34 @@ import pandas as pd
 
 from statistic import get_file_name_not_match_nameWithOwner, get_needless_repo_set
 from util.FileUtils import read_json_file, write_json_file, move_file
+from util.pd_utils import get_df_inst
 from util.utils import split_list_by_sub_count, split_data_list
+
+
+def get_df_payload_content(corpus_file, repo_dataset_file):
+    df_corpus = pd.read_csv(corpus_file)
+    df_data = pd.read_csv(repo_dataset_file)
+    df_payload_content = get_df_inst(df_corpus, nameWithOwner=list(df_data['repo'].apply(lambda x: x[len('Repository_'):])))
+    df_payload_content = df_payload_content.reset_index()
+    return df_payload_content
+
+
+def save_repo_paperContent(df_paper_title_abstract, out_file):
+    """
+    保存一份paperContent合并版
+    :param df_paper_title_abstract:
+    :param out_file:
+    :return:
+    """
+    paperContent_list = []
+    for _, row in df_paper_title_abstract.iterrows():
+        paperTitle = row['paperTitle'][1: -1]
+        paperAbstract = row['paperAbstract'][1: -1]
+        paperContent = ' [paperTitle] ' + paperTitle + ' [paperAbstract] ' + paperAbstract
+        paperContent_list.append(paperContent)
+    df_paper_title_abstract['paperContent'] = paperContent_list
+    df_paper_title_abstract = df_paper_title_abstract.drop(['paperTitle', 'paperAbstract'], axis=1)
+    df_paper_title_abstract.to_csv(out_file, index=False)
 
 
 def combine_repo_paper(input_csv, out_csv):
@@ -375,7 +402,6 @@ def load_pwc_json(dir_path):
             "papers_with_abstracts": papers_with_abstracts,
             'datasets': datasets
             }
-
 
 
 def load_repo_dir_jsons(repo_dir_path):

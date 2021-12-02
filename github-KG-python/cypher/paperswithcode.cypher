@@ -36,7 +36,7 @@ SET has_dataset.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH
 // todo 这里 Model 和 Paper 相当于平级，2020年只是以 Model 为中心建立了关系，
 // 所以还可以加上的关系有一下，这些在其他json数据中有重叠，但仅依靠其他可能有遗漏
 // Task - TASK_HAS_PAPER -> Paper
-// Paper - PAPER_ON_DATASET -> Dataset
+// todo Paper - PAPER_ON_DATASET -> Dataset
 // Paper - PAPER_IMPLEMENTED_BY_REPO -> Repo
 
 // 【关系】 Task - TASK_HAS_MODEL -> Model
@@ -122,6 +122,14 @@ SET repo.githubUrl = $githubUrl
 MERGE (paper)-[predicate:PAPER_IMPLEMENTED_BY_REPO]->(repo)
   ON CREATE SET predicate.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
 SET predicate.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+
+// 【+关系】 Paper - PAPER_ON_DATASET -> Dataset 先不加吧，确实与 MODEL_ON_DATASET 重复
+/*MERGE (paper:Paper {paperTitle: $paperTitle})
+  ON CREATE SET paper.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET paper.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+MERGE (dataset:Dataset {name: $datasetName})
+  ON CREATE SET dataset.gmtCreate = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')
+SET dataset.gmtModified = apoc.date.format(timestamp(), 'ms', 'yyyy-MM-dd HH:mm:ss', 'CTT')*/
 
 // 【关系】 Task - TASK_HAS_SUBTASK -> Subtask
 // 第一种思路：判断如果来Task还是subTask
